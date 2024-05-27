@@ -33,8 +33,8 @@ This script fetches CVE (Common Vulnerabilities and Exposures) data for specifie
 4. The following is an example.
     ```ini
     [cpeName]
-    cpe1 = your_cpe_name_1
-    cpe2 = your_cpe_name_2
+    cpe1 = cpe:2.3:a:openssl:openssl:1.1.1c:*:*:*:*:*:*:*
+    cpe2 = cpe:2.3:a:apache:log4j:1.2:-:*:*:*:*:*:*
     # Add more CPE names as needed
     ```
 
