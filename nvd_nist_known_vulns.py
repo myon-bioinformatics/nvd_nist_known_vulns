@@ -175,8 +175,16 @@ def read_ini(path: str = "config.ini") -> list[str]:
 
 
 def _record(cpe: str, record: dict[str, Any]) -> str:
-    return json.dumps({"schema": SCHEMA_VERSION, "query": {"cpe_name": cpe}, **record}, ensure_ascii=False, sort_keys=True)
+    return json.dumps({"schema": SCHEMA_VERSION, "kind": "cve", "query": {"cpe_name": cpe}, **record}, ensure_ascii=False, sort_keys=True)
 
+
+def _completion_record(cpe: str, cve_count: int) -> str:
+    """Emit positive evidence that a configured CPE query completed, including zero results."""
+    return json.dumps(
+        {"schema": SCHEMA_VERSION, "kind": "query_complete", "query": {"cpe_name": cpe}, "cve_count": cve_count},
+        ensure_ascii=False,
+        sort_keys=True,
+    )
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Fetch known CVEs from NVD by CPE.")
@@ -197,8 +205,10 @@ def main(argv: list[str] | None = None) -> int:
         for cpe in cpes:
             if not args.silent:
                 print(f"Fetching NVD CVEs for {cpe}", file=sys.stderr)
-            for record in fetch_cves(cpe, api_key=os.environ.get("NVD_API_KEY"), timeout=args.timeout):
+            records = fetch_cves(cpe, api_key=os.environ.get("NVD_API_KEY"), timeout=args.timeout)
+            for record in records:
                 print(_record(cpe, record), file=stream)
+            print(_completion_record(cpe, len(records)), file=stream)
         if args.output:
             stream.close()
             Path(temp_path).replace(args.output)
