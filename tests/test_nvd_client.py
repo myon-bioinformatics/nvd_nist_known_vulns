@@ -122,13 +122,34 @@ class Tests(unittest.TestCase):
             with self.subTest(row=row), self.assertRaises(ValueError):
                 nvd.parse_jsonl(json.dumps(row))
 
+    def test_jsonl_consumer_rejects_wrong_schema(self):
+        cpe="cpe:2.3:a:example:one:1:*:*:*:*:*:*:*"
+        row={"schema":"nvd-cve-summary/999","kind":"query_complete","query":{"cpe_name":cpe},"cve_count":0}
+        with self.assertRaises(ValueError):
+            nvd.parse_jsonl(json.dumps(row))
+
+    def test_jsonl_consumer_rejects_conflicting_completions(self):
+        cpe="cpe:2.3:a:example:one:1:*:*:*:*:*:*:*"
+        rows=[
+            {"schema":nvd.SCHEMA_VERSION,"kind":"query_complete","query":{"cpe_name":cpe},"cve_count":0},
+            {"schema":nvd.SCHEMA_VERSION,"kind":"query_complete","query":{"cpe_name":cpe},"cve_count":1},
+        ]
+        with self.assertRaises(ValueError):
+            nvd.select_cpe_records(rows,[cpe])
+
     def test_read_jsonl_accepts_utf8_bom(self):
         cpe="cpe:2.3:a:example:one:1:*:*:*:*:*:*:*"
         row={"schema":nvd.SCHEMA_VERSION,"kind":"query_complete","query":{"cpe_name":cpe},"cve_count":0}
         with tempfile.TemporaryDirectory() as d:
             path=Path(d)/"snapshot.jsonl"
+            # Public read_jsonl contract: a BOM-prefixed UTF-8 snapshot is accepted.
+            # parse_jsonl also strips a BOM deliberately, so this is end-to-end behavior,
+            # not an assertion about which layer performs the stripping.
             path.write_bytes(b"\xef\xbb\xbf"+json.dumps(row).encode("utf-8"))
             self.assertEqual(nvd.read_jsonl(path),[row])
+            path.write_text('{"schema":"wrong"}\n',encoding="utf-8")
+            with self.assertRaises(ValueError):
+                nvd.read_jsonl(path)
 
     def test_ini(self):
         with tempfile.TemporaryDirectory() as d:
