@@ -51,6 +51,7 @@ class Tests(unittest.TestCase):
         with mock.patch.object(nvd,"urlopen",side_effect=[response({"vulnerabilities":[]}),response({"vulnerabilities":[]})]) as opened, mock.patch.object(nvd.time,"monotonic",side_effect=[10.0,10.0,10.0,10.6]), mock.patch.object(nvd.time,"sleep") as sleep:
             nvd.api_call("one",api_key="secret"); nvd.api_call("two",api_key="secret")
         self.assertEqual(opened.call_args.args[0].get_header("Apikey"),"secret"); self.assertNotIn("secret",opened.call_args.args[0].full_url)
+        sleep.assert_called_once_with(0.6)
 
     def test_403_and_5xx_retry(self):
         for code in (403,500,502,503,504):
