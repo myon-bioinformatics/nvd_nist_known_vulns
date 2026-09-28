@@ -71,6 +71,44 @@ class Tests(unittest.TestCase):
         with mock.patch.object(nvd,"iter_cve_pages",return_value=pages):
             self.assertEqual([x["id"] for x in nvd.fetch_cves("cpe")],["CVE-A","CVE-Z"])
 
+    def test_jsonl_consumer_completion_and_deduplication(self):
+        cpe1="cpe:2.3:a:example:one:1:*:*:*:*:*:*:*"; cpe2="cpe:2.3:a:example:two:1:*:*:*:*:*:*:*"
+        rows=[
+            {"schema":nvd.SCHEMA_VERSION,"kind":"cve","query":{"cpe_name":cpe1},"id":"CVE-1","description":"left\u2028right"},
+            {"schema":nvd.SCHEMA_VERSION,"kind":"cve","query":{"cpe_name":cpe2},"id":"CVE-1"},
+            {"schema":nvd.SCHEMA_VERSION,"kind":"query_complete","query":{"cpe_name":cpe1},"cve_count":1},
+            {"schema":nvd.SCHEMA_VERSION,"kind":"query_complete","query":{"cpe_name":cpe2},"cve_count":1},
+        ]
+        text="\n".join(json.dumps(x,ensure_ascii=False) for x in rows)
+        parsed=nvd.parse_jsonl(text)
+        self.assertEqual(parsed[0]["description"],"left\u2028right")
+        result=nvd.select_cpe_records(parsed,[cpe1,cpe2])
+        self.assertEqual((result["status"],result["cve_count"],result["cve_ids"]),("measured",1,["CVE-1"]))
+
+    def test_jsonl_consumer_requires_completion_and_matching_count(self):
+        cpe="cpe:2.3:a:example:one:1:*:*:*:*:*:*:*"
+        cve={"schema":nvd.SCHEMA_VERSION,"kind":"cve","query":{"cpe_name":cpe},"id":"CVE-1"}
+        missing=nvd.select_cpe_records([cve],[cpe])
+        self.assertEqual(missing["reason"],"missing_query_completion")
+        for count in (0,2):
+            result=nvd.select_cpe_records([cve,{"schema":nvd.SCHEMA_VERSION,"kind":"query_complete","query":{"cpe_name":cpe},"cve_count":count}],[cpe])
+            self.assertEqual(result["reason"],"completion_count_mismatch")
+
+    def test_jsonl_consumer_zero_unknown_kind_bom_and_validation(self):
+        cpe="cpe:2.3:a:example:one:1:*:*:*:*:*:*:*"
+        future={"schema":nvd.SCHEMA_VERSION,"kind":"future","query":{"cpe_name":cpe},"payload":"x"}
+        complete={"schema":nvd.SCHEMA_VERSION,"kind":"query_complete","query":{"cpe_name":cpe},"cve_count":0}
+        parsed=nvd.parse_jsonl("\ufeff"+json.dumps(future)+"\n"+json.dumps(complete))
+        self.assertEqual(parsed,[complete])
+        self.assertEqual(nvd.select_cpe_records(parsed,[cpe])["cve_count"],0)
+        bad=[
+            {"schema":nvd.SCHEMA_VERSION,"kind":"cve","query":{"cpe_name":cpe},"id":"GHSA-x"},
+            {"schema":nvd.SCHEMA_VERSION,"kind":"query_complete","query":{"cpe_name":cpe},"cve_count":True},
+        ]
+        for row in bad:
+            with self.assertRaises(ValueError): nvd.parse_jsonl(json.dumps(row))
+        with self.assertRaises(ValueError): nvd.select_cpe_records(parsed,["requests"])
+
     def test_ini(self):
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/"x.ini"; p.write_text("[cpeName]\ncpe1=cpe:test\n",encoding="utf-8")
