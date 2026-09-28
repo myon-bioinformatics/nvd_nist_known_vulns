@@ -37,6 +37,35 @@ class Tests(unittest.TestCase):
         self.assertEqual(call.call_args_list[1].kwargs["start_index"],2)
         with mock.patch.object(nvd,"api_call",return_value={"totalResults":0,"vulnerabilities":[]}): self.assertEqual(len(list(nvd.iter_cve_pages("cpe"))),1)
 
+    def test_incomplete_or_invalid_pagination_never_completes(self):
+        cases = [
+            [
+                {"totalResults": 3, "vulnerabilities": [{"cve": {"id": "A"}}, {"cve": {"id": "B"}}]},
+                {"totalResults": 3, "vulnerabilities": []},
+            ],
+            [{"vulnerabilities": [{"cve": {"id": "A"}}]}],
+            [
+                {"totalResults": 4, "vulnerabilities": [{"cve": {"id": "A"}}, {"cve": {"id": "B"}}]},
+                {"totalResults": 2, "vulnerabilities": []},
+            ],
+        ]
+        for pages in cases:
+            with self.subTest(pages=pages), mock.patch.object(nvd, "api_call", side_effect=pages):
+                with self.assertRaises(RuntimeError):
+                    list(nvd.iter_cve_pages("cpe"))
+
+    def test_failed_cpe_does_not_emit_completion(self):
+        with tempfile.TemporaryDirectory() as d:
+            cfg=Path(d)/"c.ini"; cfg.write_text("[cpeName]\na=cpe:ok\nb=cpe:failed\n",encoding="utf-8")
+            ok={"id":"CVE-T","description":None,"cwe":[],"cvss_v4":None,"cvss_v3":None,"cvss_v2":None,"published":None,"last_modified":None,"source_identifier":None}
+            stdout=io.StringIO()
+            with mock.patch.object(nvd,"fetch_cves",side_effect=[[ok],RuntimeError("boom")]), mock.patch("sys.stdout",stdout):
+                self.assertEqual(nvd.main(["--silent","--config",str(cfg)]),1)
+            rows=[json.loads(line) for line in stdout.getvalue().split("\n") if line]
+            self.assertEqual([row["kind"] for row in rows],["cve","query_complete"])
+            self.assertEqual(rows[-1]["query"]["cpe_name"],"cpe:ok")
+            self.assertFalse(any(row.get("query",{}).get("cpe_name")=="cpe:failed" and row.get("kind")=="query_complete" for row in rows))
+
     def test_fetch_deduplicates_and_sorts(self):
         pages=[{"vulnerabilities":[{"cve":{"id":"CVE-Z"}},{"cve":{"id":"CVE-A"}}]},{"vulnerabilities":[{"cve":{"id":"CVE-A"}}]}]
         with mock.patch.object(nvd,"iter_cve_pages",return_value=pages):
@@ -74,11 +103,23 @@ class Tests(unittest.TestCase):
             out=Path(d)/"out.jsonl"
             with mock.patch.object(nvd,"fetch_cves",return_value=[record]):
                 self.assertEqual(nvd.main(["--silent","--config",str(cfg),"--output",str(out)]),0)
-            parsed=json.loads(out.read_text(encoding="utf-8")); self.assertEqual(parsed["schema"],nvd.SCHEMA_VERSION); self.assertEqual(parsed["query"]["cpe_name"],"cpe:test")
+            lines=[json.loads(line) for line in out.read_text(encoding="utf-8").split("\n") if line]
+            self.assertEqual(lines[0]["schema"],nvd.SCHEMA_VERSION); self.assertEqual(lines[0]["query"]["cpe_name"],"cpe:test")
+            self.assertEqual(lines[0]["kind"],"cve")
+            self.assertEqual(lines[1],{"cve_count":1,"kind":"query_complete","query":{"cpe_name":"cpe:test"},"schema":nvd.SCHEMA_VERSION})
             old=out.read_text(encoding="utf-8")
             with mock.patch.object(nvd,"fetch_cves",side_effect=RuntimeError("boom")):
                 self.assertEqual(nvd.main(["--silent","--config",str(cfg),"--output",str(out)]),1)
             self.assertEqual(out.read_text(encoding="utf-8"),old)
+
+    def test_zero_result_still_emits_query_completion(self):
+        with tempfile.TemporaryDirectory() as d:
+            cfg=Path(d)/"c.ini"; cfg.write_text("[cpeName]\na=cpe:zero\n",encoding="utf-8")
+            out=Path(d)/"out.jsonl"
+            with mock.patch.object(nvd,"fetch_cves",return_value=[]):
+                self.assertEqual(nvd.main(["--silent","--config",str(cfg),"--output",str(out)]),0)
+            lines=[json.loads(line) for line in out.read_text(encoding="utf-8").split("\n") if line]
+            self.assertEqual(lines,[{"cve_count":0,"kind":"query_complete","query":{"cpe_name":"cpe:zero"},"schema":nvd.SCHEMA_VERSION}])
 
     def test_throttle_intervals_are_exact(self):
         for api_key, expected in ((None, 6.0), ("secret", 0.6)):

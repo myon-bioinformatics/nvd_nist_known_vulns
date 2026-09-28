@@ -91,13 +91,34 @@ def api_call(cpe_name: str, *, start_index: int = 0, results_per_page: int = DEF
 
 def iter_cve_pages(cpe_name: str, *, api_key: str | None = None, timeout: float = 30.0) -> Iterable[dict[str, Any]]:
     start = 0
+    expected_total: int | None = None
     while True:
         page = api_call(cpe_name, start_index=start, api_key=api_key, timeout=timeout)
+        total = page.get("totalResults")
+        if isinstance(total, bool) or not isinstance(total, int) or total < 0:
+            raise RuntimeError("NVD response has invalid or missing totalResults")
+        if expected_total is None:
+            expected_total = total
+        elif total != expected_total:
+            raise RuntimeError(
+                f"NVD totalResults changed during pagination: {expected_total} -> {total}"
+            )
+        vulnerabilities = page.get("vulnerabilities", [])
+        if not isinstance(vulnerabilities, list):
+            raise RuntimeError("NVD response has invalid vulnerabilities")
+        returned = len(vulnerabilities)
+        next_start = start + returned
+        if returned == 0 and next_start < total:
+            raise RuntimeError(
+                f"NVD pagination stopped before completion: {next_start}/{total}"
+            )
+        if next_start > total:
+            raise RuntimeError(
+                f"NVD pagination exceeded totalResults: {next_start}/{total}"
+            )
         yield page
-        returned = len(page.get("vulnerabilities", []))
-        total = int(page.get("totalResults", returned))
-        start += returned
-        if returned == 0 or start >= total:
+        start = next_start
+        if start == total:
             return
 
 
@@ -175,8 +196,16 @@ def read_ini(path: str = "config.ini") -> list[str]:
 
 
 def _record(cpe: str, record: dict[str, Any]) -> str:
-    return json.dumps({"schema": SCHEMA_VERSION, "query": {"cpe_name": cpe}, **record}, ensure_ascii=False, sort_keys=True)
+    return json.dumps({"schema": SCHEMA_VERSION, "kind": "cve", "query": {"cpe_name": cpe}, **record}, ensure_ascii=False, sort_keys=True)
 
+
+def _completion_record(cpe: str, cve_count: int) -> str:
+    """Emit positive evidence that a configured CPE query completed, including zero results."""
+    return json.dumps(
+        {"schema": SCHEMA_VERSION, "kind": "query_complete", "query": {"cpe_name": cpe}, "cve_count": cve_count},
+        ensure_ascii=False,
+        sort_keys=True,
+    )
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Fetch known CVEs from NVD by CPE.")
@@ -197,8 +226,10 @@ def main(argv: list[str] | None = None) -> int:
         for cpe in cpes:
             if not args.silent:
                 print(f"Fetching NVD CVEs for {cpe}", file=sys.stderr)
-            for record in fetch_cves(cpe, api_key=os.environ.get("NVD_API_KEY"), timeout=args.timeout):
+            records = fetch_cves(cpe, api_key=os.environ.get("NVD_API_KEY"), timeout=args.timeout)
+            for record in records:
                 print(_record(cpe, record), file=stream)
+            print(_completion_record(cpe, len(records)), file=stream)
         if args.output:
             stream.close()
             Path(temp_path).replace(args.output)
