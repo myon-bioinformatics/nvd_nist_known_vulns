@@ -1,4 +1,4 @@
-"""Dependency-free NVD CVE API 2.0 client."""
+"""Dependency-free NVD CVE API 2.0 client.\n\nNetwork requests are globally throttled per process; concurrent callers are not synchronized.\n"""
 from __future__ import annotations
 
 import argparse
