@@ -74,11 +74,23 @@ class Tests(unittest.TestCase):
             out=Path(d)/"out.jsonl"
             with mock.patch.object(nvd,"fetch_cves",return_value=[record]):
                 self.assertEqual(nvd.main(["--silent","--config",str(cfg),"--output",str(out)]),0)
-            parsed=json.loads(out.read_text(encoding="utf-8")); self.assertEqual(parsed["schema"],nvd.SCHEMA_VERSION); self.assertEqual(parsed["query"]["cpe_name"],"cpe:test")
+            lines=[json.loads(line) for line in out.read_text(encoding="utf-8").split("\n") if line]
+            self.assertEqual(lines[0]["schema"],nvd.SCHEMA_VERSION); self.assertEqual(lines[0]["query"]["cpe_name"],"cpe:test")
+            self.assertEqual(lines[0]["kind"],"cve")
+            self.assertEqual(lines[1],{"cve_count":1,"kind":"query_complete","query":{"cpe_name":"cpe:test"},"schema":nvd.SCHEMA_VERSION})
             old=out.read_text(encoding="utf-8")
             with mock.patch.object(nvd,"fetch_cves",side_effect=RuntimeError("boom")):
                 self.assertEqual(nvd.main(["--silent","--config",str(cfg),"--output",str(out)]),1)
             self.assertEqual(out.read_text(encoding="utf-8"),old)
+
+    def test_zero_result_still_emits_query_completion(self):
+        with tempfile.TemporaryDirectory() as d:
+            cfg=Path(d)/"c.ini"; cfg.write_text("[cpeName]\na=cpe:zero\n",encoding="utf-8")
+            out=Path(d)/"out.jsonl"
+            with mock.patch.object(nvd,"fetch_cves",return_value=[]):
+                self.assertEqual(nvd.main(["--silent","--config",str(cfg),"--output",str(out)]),0)
+            lines=[json.loads(line) for line in out.read_text(encoding="utf-8").split("\n") if line]
+            self.assertEqual(lines,[{"cve_count":0,"kind":"query_complete","query":{"cpe_name":"cpe:zero"},"schema":nvd.SCHEMA_VERSION}])
 
     def test_throttle_intervals_are_exact(self):
         for api_key, expected in ((None, 6.0), ("secret", 0.6)):
