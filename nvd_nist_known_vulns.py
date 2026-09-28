@@ -91,13 +91,34 @@ def api_call(cpe_name: str, *, start_index: int = 0, results_per_page: int = DEF
 
 def iter_cve_pages(cpe_name: str, *, api_key: str | None = None, timeout: float = 30.0) -> Iterable[dict[str, Any]]:
     start = 0
+    expected_total: int | None = None
     while True:
         page = api_call(cpe_name, start_index=start, api_key=api_key, timeout=timeout)
+        total = page.get("totalResults")
+        if isinstance(total, bool) or not isinstance(total, int) or total < 0:
+            raise RuntimeError("NVD response has invalid or missing totalResults")
+        if expected_total is None:
+            expected_total = total
+        elif total != expected_total:
+            raise RuntimeError(
+                f"NVD totalResults changed during pagination: {expected_total} -> {total}"
+            )
+        vulnerabilities = page.get("vulnerabilities", [])
+        if not isinstance(vulnerabilities, list):
+            raise RuntimeError("NVD response has invalid vulnerabilities")
+        returned = len(vulnerabilities)
+        next_start = start + returned
+        if returned == 0 and next_start < total:
+            raise RuntimeError(
+                f"NVD pagination stopped before completion: {next_start}/{total}"
+            )
+        if next_start > total:
+            raise RuntimeError(
+                f"NVD pagination exceeded totalResults: {next_start}/{total}"
+            )
         yield page
-        returned = len(page.get("vulnerabilities", []))
-        total = int(page.get("totalResults", returned))
-        start += returned
-        if returned == 0 or start >= total:
+        start = next_start
+        if start == total:
             return
 
 
