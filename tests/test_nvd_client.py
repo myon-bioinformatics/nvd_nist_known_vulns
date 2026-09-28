@@ -37,6 +37,35 @@ class Tests(unittest.TestCase):
         self.assertEqual(call.call_args_list[1].kwargs["start_index"],2)
         with mock.patch.object(nvd,"api_call",return_value={"totalResults":0,"vulnerabilities":[]}): self.assertEqual(len(list(nvd.iter_cve_pages("cpe"))),1)
 
+    def test_incomplete_or_invalid_pagination_never_completes(self):
+        cases = [
+            [
+                {"totalResults": 3, "vulnerabilities": [{"cve": {"id": "A"}}, {"cve": {"id": "B"}}]},
+                {"totalResults": 3, "vulnerabilities": []},
+            ],
+            [{"vulnerabilities": [{"cve": {"id": "A"}}]}],
+            [
+                {"totalResults": 4, "vulnerabilities": [{"cve": {"id": "A"}}, {"cve": {"id": "B"}}]},
+                {"totalResults": 2, "vulnerabilities": []},
+            ],
+        ]
+        for pages in cases:
+            with self.subTest(pages=pages), mock.patch.object(nvd, "api_call", side_effect=pages):
+                with self.assertRaises(RuntimeError):
+                    list(nvd.iter_cve_pages("cpe"))
+
+    def test_failed_cpe_does_not_emit_completion(self):
+        with tempfile.TemporaryDirectory() as d:
+            cfg=Path(d)/"c.ini"; cfg.write_text("[cpeName]\na=cpe:ok\nb=cpe:failed\n",encoding="utf-8")
+            ok={"id":"CVE-T","description":None,"cwe":[],"cvss_v4":None,"cvss_v3":None,"cvss_v2":None,"published":None,"last_modified":None,"source_identifier":None}
+            stdout=io.StringIO()
+            with mock.patch.object(nvd,"fetch_cves",side_effect=[[ok],RuntimeError("boom")]), mock.patch("sys.stdout",stdout):
+                self.assertEqual(nvd.main(["--silent","--config",str(cfg)]),1)
+            rows=[json.loads(line) for line in stdout.getvalue().split("\n") if line]
+            self.assertEqual([row["kind"] for row in rows],["cve","query_complete"])
+            self.assertEqual(rows[-1]["query"]["cpe_name"],"cpe:ok")
+            self.assertFalse(any(row.get("query",{}).get("cpe_name")=="cpe:failed" and row.get("kind")=="query_complete" for row in rows))
+
     def test_fetch_deduplicates_and_sorts(self):
         pages=[{"vulnerabilities":[{"cve":{"id":"CVE-Z"}},{"cve":{"id":"CVE-A"}}]},{"vulnerabilities":[{"cve":{"id":"CVE-A"}}]}]
         with mock.patch.object(nvd,"iter_cve_pages",return_value=pages):
