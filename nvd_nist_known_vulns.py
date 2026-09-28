@@ -1,99 +1,218 @@
 """Dependency-free NVD CVE API 2.0 client."""
 from __future__ import annotations
-import argparse, configparser, json, os, sys, time
+
+import argparse
+import configparser
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+from http.client import HTTPException, IncompleteRead
+import json
+import os
+from pathlib import Path
+import sys
+import tempfile
+import time
 from typing import Any, Iterable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-NVD_CVE_API="https://services.nvd.nist.gov/rest/json/cves/2.0"
-DEFAULT_RESULTS_PER_PAGE=2000
-SCHEMA_VERSION="nvd-cve-summary/1"
+NVD_CVE_API = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+DEFAULT_RESULTS_PER_PAGE = 2000
+SCHEMA_VERSION = "nvd-cve-summary/1"
+UNAUTHENTICATED_INTERVAL = 6.0
+AUTHENTICATED_INTERVAL = 0.6
+MAX_RETRY_DELAY = 60.0
+RETRYABLE_HTTP = {429, 500, 502, 503, 504}
+_last_request_at: float | None = None
 
-def _request_json(url:str, *, api_key:str|None=None, timeout:float=30.0, retries:int=2)->dict[str,Any]:
-    headers={"Accept":"application/json","User-Agent":"nvd_nist_known_vulns/stdlib"}
-    if api_key: headers["apiKey"]=api_key
-    for attempt in range(retries+1):
+
+def _throttle(api_key: str | None) -> None:
+    global _last_request_at
+    interval = AUTHENTICATED_INTERVAL if api_key else UNAUTHENTICATED_INTERVAL
+    now = time.monotonic()
+    if _last_request_at is not None:
+        remaining = interval - (now - _last_request_at)
+        if remaining > 0:
+            time.sleep(remaining)
+            now = time.monotonic()
+    _last_request_at = now
+
+
+def _retry_delay(value: str | None, attempt: int) -> float:
+    fallback = min(2.0**attempt, MAX_RETRY_DELAY)
+    if not value:
+        return fallback
+    try:
+        return min(max(float(value), 0.0), MAX_RETRY_DELAY)
+    except ValueError:
         try:
-            with urlopen(Request(url,headers=headers),timeout=timeout) as response:
+            when = parsedate_to_datetime(value)
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=timezone.utc)
+            return min(max((when - datetime.now(timezone.utc)).total_seconds(), 0.0), MAX_RETRY_DELAY)
+        except (TypeError, ValueError, OverflowError):
+            return fallback
+
+
+def _request_json(url: str, *, api_key: str | None = None, timeout: float = 30.0, retries: int = 3) -> dict[str, Any]:
+    headers = {"Accept": "application/json", "User-Agent": "nvd_nist_known_vulns/stdlib"}
+    if api_key:
+        headers["apiKey"] = api_key
+    for attempt in range(retries + 1):
+        _throttle(api_key)
+        try:
+            with urlopen(Request(url, headers=headers), timeout=timeout) as response:
                 return json.load(response)
         except HTTPError as exc:
-            if exc.code==429 and attempt<retries:
-                value=exc.headers.get("Retry-After")
-                time.sleep(float(value) if value else 2.0**attempt); continue
-            raise RuntimeError(f"NVD HTTP error {exc.code}: {exc.reason}") from exc
-        except (URLError,TimeoutError) as exc:
-            if attempt<retries: time.sleep(2.0**attempt); continue
+            retryable = exc.code in RETRYABLE_HTTP or (exc.code == 403 and not api_key)
+            message = exc.headers.get("message") if exc.headers else None
+            if retryable and attempt < retries:
+                time.sleep(_retry_delay(exc.headers.get("Retry-After") if exc.headers else None, attempt))
+                continue
+            detail = f"; {message}" if message else ""
+            hint = "; possible unauthenticated rate limit" if exc.code == 403 and not api_key else ""
+            raise RuntimeError(f"NVD HTTP error {exc.code}: {exc.reason}{detail}{hint}") from exc
+        except (URLError, TimeoutError, HTTPException, IncompleteRead) as exc:
+            if attempt < retries:
+                time.sleep(min(2.0**attempt, MAX_RETRY_DELAY))
+                continue
             raise RuntimeError(f"NVD request failed: {exc}") from exc
     raise AssertionError("unreachable")
 
-def api_call(cpe_name:str, *, start_index:int=0, results_per_page:int=DEFAULT_RESULTS_PER_PAGE, api_key:str|None=None, timeout:float=30.0)->dict[str,Any]:
-    query=urlencode({"cpeName":cpe_name,"startIndex":start_index,"resultsPerPage":results_per_page})
-    return _request_json(f"{NVD_CVE_API}?{query}",api_key=api_key,timeout=timeout)
 
-def iter_cve_pages(cpe_name:str, *, api_key:str|None=None, timeout:float=30.0)->Iterable[dict[str,Any]]:
-    start=0
+def api_call(cpe_name: str, *, start_index: int = 0, results_per_page: int = DEFAULT_RESULTS_PER_PAGE, api_key: str | None = None, timeout: float = 30.0) -> dict[str, Any]:
+    query = urlencode({"cpeName": cpe_name, "startIndex": start_index, "resultsPerPage": results_per_page})
+    return _request_json(f"{NVD_CVE_API}?{query}", api_key=api_key, timeout=timeout)
+
+
+def iter_cve_pages(cpe_name: str, *, api_key: str | None = None, timeout: float = 30.0) -> Iterable[dict[str, Any]]:
+    start = 0
     while True:
-        page=api_call(cpe_name,start_index=start,api_key=api_key,timeout=timeout)
+        page = api_call(cpe_name, start_index=start, api_key=api_key, timeout=timeout)
         yield page
-        returned=len(page.get("vulnerabilities",[])); total=int(page.get("totalResults",returned))
-        start+=returned
-        if returned==0 or start>=total: return
+        returned = len(page.get("vulnerabilities", []))
+        total = int(page.get("totalResults", returned))
+        start += returned
+        if returned == 0 or start >= total:
+            return
 
-def _description(cve):
-    items=cve.get("descriptions",[])
+
+def _description(cve: dict[str, Any]) -> str | None:
+    items = cve.get("descriptions", [])
     for item in items:
-        if item.get("lang")=="en": return item.get("value")
+        if item.get("lang") == "en":
+            return item.get("value")
     return items[0].get("value") if items else None
 
-def _cwes(cve):
-    out=[]
-    for weakness in cve.get("weaknesses",[]):
-        for item in weakness.get("description",[]):
-            value=item.get("value")
-            if value and value not in out: out.append(value)
-    return out
 
-def _metric(cve,names):
-    metrics=cve.get("metrics",{})
+def _cwes(cve: dict[str, Any]) -> list[str]:
+    result: list[str] = []
+    for weakness in cve.get("weaknesses", []):
+        for item in weakness.get("description", []):
+            value = item.get("value")
+            if value and value not in result:
+                result.append(value)
+    return result
+
+
+def _metric(cve: dict[str, Any], names: tuple[str, ...]) -> dict[str, Any] | None:
+    metrics = cve.get("metrics", {})
     for name in names:
-        if metrics.get(name):
-            item=metrics[name][0]; data=item.get("cvssData",{})
-            return {"version":data.get("version"),"base_score":data.get("baseScore"),"base_severity":data.get("baseSeverity") or item.get("baseSeverity"),"vector":data.get("vectorString")}
+        candidates = metrics.get(name, [])
+        if candidates:
+            item = next((x for x in candidates if x.get("type") == "Primary"), candidates[0])
+            data = item.get("cvssData", {})
+            return {
+                "version": data.get("version"),
+                "base_score": data.get("baseScore"),
+                "base_severity": data.get("baseSeverity") or item.get("baseSeverity"),
+                "vector": data.get("vectorString"),
+                "source": item.get("source"),
+                "type": item.get("type"),
+            }
     return None
 
-def format_cve_data(json_data):
-    records={}
-    for vulnerability in json_data.get("vulnerabilities",[]):
-        cve=vulnerability.get("cve",{}); cve_id=cve.get("id")
-        if not cve_id: continue
-        records[cve_id]={"id":cve_id,"description":_description(cve),"cwe":_cwes(cve),"cvss_v4":_metric(cve,("cvssMetricV40",)),"cvss_v3":_metric(cve,("cvssMetricV31","cvssMetricV30")),"cvss_v2":_metric(cve,("cvssMetricV2",)),"published":cve.get("published"),"last_modified":cve.get("lastModified"),"source_identifier":cve.get("sourceIdentifier")}
+
+def format_cve_data(json_data: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    records: dict[str, dict[str, Any]] = {}
+    for vulnerability in json_data.get("vulnerabilities", []):
+        cve = vulnerability.get("cve", {})
+        cve_id = cve.get("id")
+        if not cve_id:
+            continue
+        records[cve_id] = {
+            "id": cve_id,
+            "description": _description(cve),
+            "cwe": _cwes(cve),
+            "cvss_v4": _metric(cve, ("cvssMetricV40",)),
+            "cvss_v3": _metric(cve, ("cvssMetricV31", "cvssMetricV30")),
+            "cvss_v2": _metric(cve, ("cvssMetricV2",)),
+            "published": cve.get("published"),
+            "last_modified": cve.get("lastModified"),
+            "source_identifier": cve.get("sourceIdentifier"),
+        }
     return records
 
-def fetch_cves(cpe_name, *, api_key=None, timeout=30.0):
-    records={}
-    for page in iter_cve_pages(cpe_name,api_key=api_key,timeout=timeout): records.update(format_cve_data(page))
-    return [records[k] for k in sorted(records)]
 
-def read_ini(path="config.ini"):
-    config=configparser.ConfigParser()
-    if not config.read(path,encoding="utf-8"): raise FileNotFoundError(path)
-    if "cpeName" not in config: raise ValueError(f"{path}: missing [cpeName] section")
-    return [v.strip() for _,v in config["cpeName"].items() if v.strip()]
+def fetch_cves(cpe_name: str, *, api_key: str | None = None, timeout: float = 30.0) -> list[dict[str, Any]]:
+    records: dict[str, dict[str, Any]] = {}
+    for page in iter_cve_pages(cpe_name, api_key=api_key, timeout=timeout):
+        records.update(format_cve_data(page))
+    return [records[key] for key in sorted(records)]
 
-def main(argv=None):
-    parser=argparse.ArgumentParser(description="Fetch known CVEs from NVD by CPE.")
-    parser.add_argument("--silent",action="store_true"); parser.add_argument("--config",default="config.ini")
-    parser.add_argument("--output"); parser.add_argument("--timeout",type=float,default=30.0)
-    args=parser.parse_args(argv); stream=open(args.output,"w",encoding="utf-8") if args.output else sys.stdout
+
+def read_ini(path: str = "config.ini") -> list[str]:
+    config = configparser.ConfigParser()
+    if not config.read(path, encoding="utf-8"):
+        raise FileNotFoundError(path)
+    if "cpeName" not in config:
+        raise ValueError(f"{path}: missing [cpeName] section")
+    return [value.strip() for _, value in config["cpeName"].items() if value.strip()]
+
+
+def _record(cpe: str, record: dict[str, Any]) -> str:
+    return json.dumps({"schema": SCHEMA_VERSION, "query": {"cpe_name": cpe}, **record}, ensure_ascii=False, sort_keys=True)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Fetch known CVEs from NVD by CPE.")
+    parser.add_argument("--silent", action="store_true")
+    parser.add_argument("--config", default="config.ini")
+    parser.add_argument("--output")
+    parser.add_argument("--timeout", type=float, default=30.0)
+    args = parser.parse_args(argv)
+    temp_path: Path | None = None
+    stream: Any = sys.stdout
     try:
-        for cpe in read_ini(args.config):
-            if not args.silent: print(f"Fetching NVD CVEs for {cpe}",file=sys.stderr)
-            for record in fetch_cves(cpe,api_key=os.environ.get("NVD_API_KEY"),timeout=args.timeout):
-                print(json.dumps({"schema":SCHEMA_VERSION,"query":{"cpe_name":cpe},**record},ensure_ascii=False,sort_keys=True),file=stream)
-    except (OSError,ValueError,RuntimeError) as exc:
-        print(f"error: {exc}",file=sys.stderr); return 1
+        cpes = read_ini(args.config)
+        if args.output:
+            target = Path(args.output)
+            handle = tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=target.parent, prefix=target.name + ".", suffix=".tmp", delete=False)
+            stream = handle
+            temp_path = Path(handle.name)
+        for cpe in cpes:
+            if not args.silent:
+                print(f"Fetching NVD CVEs for {cpe}", file=sys.stderr)
+            for record in fetch_cves(cpe, api_key=os.environ.get("NVD_API_KEY"), timeout=args.timeout):
+                print(_record(cpe, record), file=stream)
+        if args.output:
+            stream.close()
+            Path(temp_path).replace(args.output)
+            temp_path = None
+        return 0
+    except (OSError, ValueError, RuntimeError, HTTPException) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     finally:
-        if args.output: stream.close()
-    return 0
-if __name__=="__main__": raise SystemExit(main())
+        if args.output and stream is not sys.stdout and not stream.closed:
+            stream.close()
+        if temp_path is not None:
+            try:
+                temp_path.unlink()
+            except FileNotFoundError:
+                pass
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
