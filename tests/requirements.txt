@@ -1,0 +1,2 @@
+# Test tooling only; pytest 8 supports the Python 3.9 lane.
+pytest>=8,<9

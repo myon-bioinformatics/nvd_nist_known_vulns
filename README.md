@@ -70,3 +70,9 @@ This product uses data from the NVD API but is not endorsed or certified by the 
 ## License
 
 MIT
+
+## Test evidence
+
+Install test-only tools with `python -m pip install -r tests/requirements.txt`.
+CI preserves native pytest JSONL and JUnit while retaining the `python -S`
+runtime isolation lane. See [recording and exploration](docs/pytest-observations.md).
