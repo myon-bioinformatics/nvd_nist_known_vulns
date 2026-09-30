@@ -19,3 +19,36 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: python -S -m py_compile nvd_nist_known_vulns.py
       - run: python -S -m unittest discover -s tests -v
+
+      - name: Install test-only dependencies
+        run: python -m pip install -r tests/requirements.txt
+      - name: Record native pytest outcomes and JUnit
+        run: python -m pytest tests -p vendor.xprobe_pytest --xprobe-jsonl=reports/pytest-events.jsonl --xprobe-repository=myon-bioinformatics/nvd_nist_known_vulns --junitxml=reports/pytest-${{ matrix.python-version }}.xml
+      - name: Preserve native observations
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pytest-events-py${{ matrix.python-version }}
+          path: reports/pytest-events.jsonl
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Preserve raw JUnit
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: junit-py${{ matrix.python-version }}
+          path: reports/pytest-${{ matrix.python-version }}.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+  failure-identity:
+    needs: test
+    if: always()
+    permissions:
+      contents: read
+      actions: read
+    uses: myon-bioinformatics/myon-bioinformatics/.github/workflows/reusable-junit-identity.yml@4dfda95d6573250477f991a0421fa6acb9bc0258
+    with:
+      expected-reports: '["junit-py3.9/pytest-3.9.xml","junit-py3.10/pytest-3.10.xml","junit-py3.11/pytest-3.11.xml","junit-py3.12/pytest-3.12.xml","junit-py3.13/pytest-3.13.xml","junit-py3.14/pytest-3.14.xml"]'
+      artifact-pattern: "junit-py*"
+      output-artifact: "failure-identity"
