@@ -10,18 +10,22 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_adapter_provenance():
-    provenance = json.loads((ROOT / 'vendor/xprobe_pytest.provenance.json').read_text())
-    data = (ROOT / 'vendor/xprobe_pytest.py').read_bytes()
-    commit = '326acd667e13b21bf53ccc1590af960edf8cbf6c'
-    blob = '70fac53151e97f5f28d23f9961d3837b7a885ea8'
-    sha256 = 'c0ea71f9d971bf47a9f5f1794ef8a7f641dd17694ea8e7f29795d326c5229285'
-    assert provenance['repository'] == 'myon-bioinformatics/xprobe'
-    assert provenance['path'] == 'scripts/xprobe_pytest.py'
-    assert provenance['commit'] == commit
-    assert provenance['sha256'] == sha256
-    assert provenance['blob_sha'] == blob
-    assert hashlib.sha256(data).hexdigest() == sha256
-    assert hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest() == blob
+    manifest = json.loads((ROOT / 'vendor.lock.json').read_text())
+    assert manifest['schema'] == 'vendor-lock/1'
+    assert {entry['destination'] for entry in manifest['files']} == {
+        'vendor/xprobe_pytest.py', 'vendor/xprobe-LICENSE'}
+    assert len({entry['commit'] for entry in manifest['files']}) == 1
+    for entry in manifest['files']:
+        assert entry['repository'] == 'myon-bioinformatics/xprobe'
+        assert entry['ref'] == 'refs/heads/main'
+        assert len(entry['commit']) == 40
+        assert all(c in '0123456789abcdef' for c in entry['commit'])
+        expected_source = ('scripts/xprobe_pytest.py'
+                           if entry['destination'].endswith('.py') else 'LICENSE')
+        assert entry['source'] == expected_source
+        data = (ROOT / entry['destination']).read_bytes()
+        assert hashlib.sha256(data).hexdigest() == entry['sha256']
+        assert hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest() == entry['blob_sha']
 
 
 def test_native_failure_evidence(tmp_path):

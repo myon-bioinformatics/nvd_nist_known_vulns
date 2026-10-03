@@ -17,6 +17,19 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Check out the pinned vendor placement tool
+        uses: actions/checkout@v7
+        with:
+          repository: myon-bioinformatics/myon-bioinformatics
+          ref: ec71deac0b4232132130021037482b3f97670805
+          path: .vendor-sync-tools
+          persist-credentials: false
+      - name: Verify vendored bytes and fixed-commit placement
+        run: |
+          python -S .vendor-sync-tools/vendor_sync.py check --manifest vendor.lock.json
+          rm vendor/xprobe_pytest.py vendor/xprobe-LICENSE
+          python -S .vendor-sync-tools/vendor_sync.py materialize --manifest vendor.lock.json
+          python -S .vendor-sync-tools/vendor_sync.py check --manifest vendor.lock.json
       - run: python -S -m py_compile nvd_nist_known_vulns.py
       - run: python -S -m unittest discover -s tests -v
 

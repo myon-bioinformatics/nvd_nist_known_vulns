@@ -11,8 +11,9 @@ python -m pytest -p vendor.xprobe_pytest --xprobe-jsonl=reports/local-001.jsonl 
 
 The vendored adapter is byte-for-byte from xprobe commit
 `326acd667e13b21bf53ccc1590af960edf8cbf6c`, `scripts/xprobe_pytest.py`.
-Its license and SHA-256/Git blob provenance live alongside it in `vendor/`.
-Update from a reviewed upstream commit and refresh the provenance together.
+Its license lives alongside it in `vendor/`; `vendor.lock.json` records the source
+commit and SHA-256/Git blob hashes for both files. See
+[vendor automation](vendor-automation.md) for placement checks and update PRs.
 
 Records distinguish setup/call/teardown and collection, with native failure,
 error, skip, xfail, xpass and strict XPASS outcomes. Records describe phases,
