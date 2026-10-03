@@ -1,2 +1,3 @@
-# Test tooling only; pytest 8 supports the Python 3.9 lane.
-pytest>=8,<9
+# Test tooling only; use minimum-only constraints (myon-bioinformatics#22).
+# pip selects a compatible pytest release for each supported Python version.
+pytest>=8
