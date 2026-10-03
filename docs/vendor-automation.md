@@ -11,7 +11,7 @@ job downloads that same snapshot, verifies it offline, then tests it. Upstream
 changes during the matrix cannot select different source commits.
 
 CI uses the shared stdlib tool at
-`90bc069c33901bd4b5373eb02311026e0acf2e2e`. It checks the baseline copies,
+`37f30d5acdc1906d4acbd103ce6f652bc13ca7eb`. It checks the baseline copies,
 restores them from locked commits, then **automatically updates** the allowlisted
 files from their public upstream refs and runs the existing tests. Each upstream
 ref resolves once per workflow run; the resulting full SHA and hashes are
@@ -24,7 +24,7 @@ same commands after checking out the pinned shared tool in `.vendor-sync-tools`:
 
 ```sh
 git clone https://github.com/myon-bioinformatics/myon-bioinformatics.git .vendor-sync-tools
-git -C .vendor-sync-tools checkout 90bc069c33901bd4b5373eb02311026e0acf2e2e
+git -C .vendor-sync-tools checkout 37f30d5acdc1906d4acbd103ce6f652bc13ca7eb
 python -S .vendor-sync-tools/vendor_sync.py check
 python -S .vendor-sync-tools/vendor_sync.py materialize
 python -S .vendor-sync-tools/vendor_sync.py update
