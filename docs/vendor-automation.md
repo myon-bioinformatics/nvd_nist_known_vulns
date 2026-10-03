@@ -11,7 +11,7 @@ job downloads that same snapshot, verifies it offline, then tests it. Upstream
 changes during the matrix cannot select different source commits.
 
 CI uses the shared stdlib tool at
-`621ff651a25e583e62d7d562a01b0340674366f8`. It checks the baseline copies,
+`90bc069c33901bd4b5373eb02311026e0acf2e2e`. It checks the baseline copies,
 restores them from locked commits, then **automatically updates** the allowlisted
 files from their public upstream refs and runs the existing tests. Each upstream
 ref resolves once per workflow run; the resulting full SHA and hashes are
@@ -24,7 +24,7 @@ same commands after checking out the pinned shared tool in `.vendor-sync-tools`:
 
 ```sh
 git clone https://github.com/myon-bioinformatics/myon-bioinformatics.git .vendor-sync-tools
-git -C .vendor-sync-tools checkout 621ff651a25e583e62d7d562a01b0340674366f8
+git -C .vendor-sync-tools checkout 90bc069c33901bd4b5373eb02311026e0acf2e2e
 python -S .vendor-sync-tools/vendor_sync.py check
 python -S .vendor-sync-tools/vendor_sync.py materialize
 python -S .vendor-sync-tools/vendor_sync.py update
@@ -46,4 +46,4 @@ Changes exist only in the disposable run checkout and are not written back to
 main. Existing test failures retain their exit status and evidence. Download,
 hash-verification or unrecoverable fetch failures fail the update and CI; they never
 silently fall back to old files. Existing JUnit/native artifact handling and
-Pages/runtime policies are unchanged.
+runtime policies are unchanged.
