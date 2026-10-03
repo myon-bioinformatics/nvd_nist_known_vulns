@@ -1,12 +1,61 @@
 name: Python
 on:
   pull_request:
+  workflow_dispatch:
+    inputs:
+      vendor-mode:
+        description: Public vendor placement mode for this CI run
+        type: choice
+        options: [update, locked]
+        default: update
   push:
     branches: [main]
 permissions:
   contents: read
 jobs:
+  resolve-vendor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Check out the pinned vendor placement tool
+        uses: actions/checkout@v7
+        with:
+          repository: myon-bioinformatics/myon-bioinformatics
+          ref: 90bc069c33901bd4b5373eb02311026e0acf2e2e
+          path: .vendor-sync-tools
+          persist-credentials: false
+      - name: Verify vendored bytes and fixed-commit placement
+        shell: bash
+        run: |
+          python -S .vendor-sync-tools/vendor_sync.py check --manifest vendor.lock.json
+          rm vendor/xprobe_pytest.py vendor/xprobe-LICENSE
+          python -S .vendor-sync-tools/vendor_sync.py materialize --manifest vendor.lock.json
+          python -S .vendor-sync-tools/vendor_sync.py check --manifest vendor.lock.json
+      - name: Update public vendor files for this run
+        shell: bash
+        if: inputs.vendor-mode != 'locked'
+        run: |
+          python -S .vendor-sync-tools/vendor_sync.py update --manifest vendor.lock.json
+          python -S .vendor-sync-tools/vendor_sync.py check --manifest vendor.lock.json
+      - name: Preserve resolved vendor snapshot
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: vendor-snapshot
+          path: |
+            vendor.lock.json
+            vendor/
+          if-no-files-found: error
+          retention-days: 14
+
   test:
+    needs: resolve-vendor
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -14,6 +63,8 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
@@ -21,15 +72,16 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: myon-bioinformatics/myon-bioinformatics
-          ref: ec71deac0b4232132130021037482b3f97670805
+          ref: 90bc069c33901bd4b5373eb02311026e0acf2e2e
           path: .vendor-sync-tools
           persist-credentials: false
-      - name: Verify vendored bytes and fixed-commit placement
-        run: |
-          python -S .vendor-sync-tools/vendor_sync.py check --manifest vendor.lock.json
-          rm vendor/xprobe_pytest.py vendor/xprobe-LICENSE
-          python -S .vendor-sync-tools/vendor_sync.py materialize --manifest vendor.lock.json
-          python -S .vendor-sync-tools/vendor_sync.py check --manifest vendor.lock.json
+      - name: Download resolved vendor snapshot
+        uses: actions/download-artifact@v8
+        with:
+          name: vendor-snapshot
+          path: .
+      - name: Verify resolved vendor snapshot
+        run: python -S .vendor-sync-tools/vendor_sync.py check --manifest vendor.lock.json
       - run: python -S -m py_compile nvd_nist_known_vulns.py
       - run: python -S -m unittest discover -s tests -v
 
@@ -52,6 +104,17 @@ jobs:
           name: junit-py${{ matrix.python-version }}
           path: reports/pytest-${{ matrix.python-version }}.xml
           if-no-files-found: warn
+          retention-days: 14
+
+      - name: Preserve vendor lock used by this run
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: vendor-lock-py${{ matrix.python-version }}
+          path: |
+            vendor.lock.json
+            vendor/
+          if-no-files-found: error
           retention-days: 14
 
   failure-identity:

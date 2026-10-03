@@ -1,25 +1,45 @@
-"""Keep verification and proposal workflows on the same reviewed tool."""
+"""Parsed CI contract; PyYAML is test-only, not used by application/unittest."""
 from pathlib import Path
 import re
-import unittest
-
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class VendorWorkflowTests(unittest.TestCase):
-    def test_tool_and_reusable_workflow_pins_match(self):
-        placement = (ROOT / '.github/workflows/python.yml').read_text()
-        proposals = (ROOT / '.github/workflows/vendor-update.yml').read_text()
-        checkout = re.findall(r'^          ref: ([0-9a-f]{40})$', placement, re.M)
-        workflow = re.findall(r'reusable-vendor-update\.yml@([0-9a-f]{40})', proposals)
-        tool = re.findall(r'^      tool-commit: ([0-9a-f]{40})$', proposals, re.M)
-        self.assertEqual(len(checkout), 1)
-        self.assertEqual(checkout, workflow)
-        self.assertEqual(checkout, tool)
-        self.assertIn("if: vars.VENDOR_UPDATES_ENABLED == 'true'", proposals)
-        self.assertIn('update-token: ${{ secrets.VENDOR_UPDATE_TOKEN }}', proposals)
-
-
-if __name__ == '__main__':
-    unittest.main()
+def test_public_vendor_ci_updates_without_repository_writes():
+    import yaml
+    ci = yaml.load((ROOT / '.github/workflows/python.yml').read_text(encoding='utf-8'), Loader=yaml.BaseLoader)
+    jobs = ci['jobs']
+    resolve = jobs['resolve-vendor']['steps']
+    test = jobs['test']['steps']
+    update = next(s for s in resolve if s.get('name') == 'Update public vendor files for this run')
+    assert update['if'] == "inputs.vendor-mode != 'locked'"
+    assert update['shell'] == 'bash'
+    assert not any(word in update['run'] for word in ('|| true', '|| :', 'set +e'))
+    assert 'continue-on-error' not in update
+    assert update['run'].splitlines() == [
+        'python -S .vendor-sync-tools/vendor_sync.py update --manifest vendor.lock.json',
+        'python -S .vendor-sync-tools/vendor_sync.py check --manifest vendor.lock.json']
+    assert ci['on']['workflow_dispatch']['inputs']['vendor-mode']['default'] == 'update'
+    assert jobs['test']['needs'] == 'resolve-vendor'
+    assert sum('vendor_sync.py update' in s.get('run', '') for steps in (resolve, test) for s in steps) == 1
+    download = next(i for i,s in enumerate(test) if s.get('uses', '').startswith('actions/download-artifact@'))
+    verify = next(i for i,s in enumerate(test) if s.get('name') == 'Verify resolved vendor snapshot')
+    assert test[download]['with']['name'] == 'vendor-snapshot'
+    assert download < verify
+    assert 'vendor_sync.py check' in test[verify]['run']
+    assert all('vendor_sync.py update' not in s.get('run', '') for s in test)
+    for steps, name in ((resolve, 'Preserve resolved vendor snapshot'), (test, 'Preserve vendor lock used by this run')):
+        upload = next(s for s in steps if s.get('name') == name)
+        assert upload['if'] == 'always()'
+        assert upload['with']['if-no-files-found'] == 'error'
+        assert set(upload['with']['path'].splitlines()) == {'vendor.lock.json', 'vendor/'}
+    pins = [s['with']['ref'] for steps in (resolve, test) for s in steps
+            if s.get('with', {}).get('repository') == 'myon-bioinformatics/myon-bioinformatics']
+    assert len(pins) == 2 and len(set(pins)) == 1
+    assert all(re.fullmatch('[0-9a-f]{40}', pin) for pin in pins)
+    assert not (ROOT / '.github/workflows/vendor-update.yml').exists()
+    assert ci['permissions'] == {'contents': 'read'}
+    for steps in (resolve, test):
+        assert all(s['with']['persist-credentials'] == 'false' for s in steps if s.get('uses','').startswith('actions/checkout@'))
+    text = (ROOT / '.github/workflows/python.yml').read_text(encoding='utf-8')
+    assert not any(word in text for word in ('VENDOR_UPDATE_TOKEN', 'VENDOR_UPDATES_ENABLED', 'GH_TOKEN', 'git push', 'git commit', 'gh pr', 'continue-on-error'))

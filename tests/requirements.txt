@@ -1,3 +1,4 @@
 # Test tooling only; use minimum-only constraints (myon-bioinformatics#22).
 # pip selects a compatible pytest release for each supported Python version.
 pytest>=8
+PyYAML>=6

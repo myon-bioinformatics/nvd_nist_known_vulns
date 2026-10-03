@@ -1,52 +1,49 @@
-# Vendored test adapter placement and updates
+# Public vendor placement and CI updates
 
-The application remains stdlib-only. The pytest adapter is test tooling, checked
-in with its upstream license for offline local tests. `vendor.lock.json` is the
-source of truth for both files: repository, fully qualified upstream branch,
-immutable commit, source/destination paths, Git blob SHA and SHA-256.
+The checked-in `vendor.lock.json` records each allowlisted source and LICENSE
+file with its upstream commit, Git blob and SHA-256. Checked-in copies support
+offline local tests; application runtime dependencies are unchanged. Git
+attributes retain upstream bytes on Windows and Unix.
 
-The initial lock preserves the existing adapter and license bytes from xprobe
-`326acd667e13b21bf53ccc1590af960edf8cbf6c`; this change does not update their code.
-The old adapter-only provenance JSON is replaced by the lock, which covers the
-license too. `vendor/* -text` prevents Git from rewriting the locked bytes.
+CI resolves and updates the allowlist once in a `resolve-vendor` job. That job
+uploads the lock plus exact vendor bytes as `vendor-snapshot`; every OS/Python
+job downloads that same snapshot, verifies it offline, then tests it. Upstream
+changes during the matrix cannot select different source commits.
 
-## Verify or restore fixed versions
+CI uses the shared stdlib tool at
+`90bc069c33901bd4b5373eb02311026e0acf2e2e`. It checks the baseline copies,
+restores them from locked commits, then **automatically updates** the allowlisted
+files from their public upstream refs and runs the existing tests. Each upstream
+ref resolves once per workflow run; the resulting full SHA and hashes are
+recorded in the CI checkout before tests run. A separate Actions artifact
+preserves the lock and vendor bytes used by that run, including when tests fail. Unchanged selected bytes do not
+churn the baseline pins. The updater itself stays at its reviewed full SHA.
 
-The Python CI matrix checks checked-in hashes, removes the two locked files,
-restores them from their fixed source commits, then checks them again before
-running the existing tests and evidence collector. Placement uses the stdlib
-`vendor_sync.py` from the shared repository at
-`ec71deac0b4232132130021037482b3f97670805`.
-
-With that tool checked out locally, run from this repository root:
+There is no manual step required for normal push/PR CI. An ALM agent can use the
+same commands after checking out the pinned shared tool in `.vendor-sync-tools`:
 
 ```sh
-python -S /path/to/shared/vendor_sync.py check --manifest vendor.lock.json
-python -S /path/to/shared/vendor_sync.py materialize --manifest vendor.lock.json
+git clone https://github.com/myon-bioinformatics/myon-bioinformatics.git .vendor-sync-tools
+git -C .vendor-sync-tools checkout 90bc069c33901bd4b5373eb02311026e0acf2e2e
+python -S .vendor-sync-tools/vendor_sync.py check
+python -S .vendor-sync-tools/vendor_sync.py materialize
+python -S .vendor-sync-tools/vendor_sync.py update
+python -S .vendor-sync-tools/vendor_sync.py check
+python -S -m unittest discover -s tests -v
+python -m pytest tests
 ```
 
-`check` is offline. `materialize` fetches only missing or incorrect bytes and
-checks both hashes before placing them. Normal local tests require no network.
+A dispatch caller may select `vendor-mode=locked` to test only the recorded
+baseline; default dispatch and ordinary push/PR CI use `update`. Offline local
+pytest continues to use checked-in copies and does not initiate downloads.
 
-## Propose updates
-
-`vendor-update.yml` calls the same reviewed shared commit weekly or on manual
-dispatch. It is disabled unless `VENDOR_UPDATES_ENABLED` is exactly `true`.
-No variable or secret is configured by this change.
-
-After the yourself pilot has demonstrated a real update PR, its CI and duplicate
-PR prevention, configure `VENDOR_UPDATE_TOKEN` using the dedicated GitHub App or
-fine-grained PAT with contents/pull-request write access to this repository.
-Then set the variable to `true` and manually dispatch the workflow to verify
-this consumer. Setting it back to `false` disables proposals.
-
-The shared updater resolves the upstream branch once, verifies each fetched
-file against GitHub's blob metadata, and proposes changed bytes and lock pins
-together. It does not auto-merge or run candidate Python files itself. Review
-the source/license changes and this repository's CI before merging a proposal.
-If the bytes are unchanged, no update PR is created.
-
-When updating the shared automation itself, change the Python workflow checkout
-ref, reusable workflow ref and `tool-commit` together; a regression check guards
-against mixed tool versions. Shared behavior and token setup are documented in
-the [shared vendor automation guide](https://github.com/myon-bioinformatics/myon-bioinformatics/blob/ec71deac0b4232132130021037482b3f97670805/docs/vendor-automation.md).
+Public source and metadata downloads are anonymous. API 403/429 uses a
+temporary public Git snapshot with credential helpers disabled; it retains the
+resolved SHA when available. Failure of both paths stays nonzero. No dedicated token, secret,
+enable variable, scheduled PR creator, commit, push or automatic merge remains
+in this vendor path. Both CI checkouts disable persisted Git credentials.
+Changes exist only in the disposable run checkout and are not written back to
+main. Existing test failures retain their exit status and evidence. Download,
+hash-verification or unrecoverable fetch failures fail the update and CI; they never
+silently fall back to old files. Existing JUnit/native artifact handling and
+runtime policies are unchanged.
