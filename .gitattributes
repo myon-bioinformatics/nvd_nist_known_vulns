@@ -1,1 +1,1 @@
-vendor/xprobe_pytest.py text eol=lf
+vendor/* -text

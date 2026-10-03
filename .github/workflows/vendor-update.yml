@@ -1,0 +1,19 @@
+name: Propose vendor updates
+
+on:
+  schedule:
+    - cron: '41 2 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  propose:
+    if: vars.VENDOR_UPDATES_ENABLED == 'true'
+    uses: myon-bioinformatics/myon-bioinformatics/.github/workflows/reusable-vendor-update.yml@ec71deac0b4232132130021037482b3f97670805
+    with:
+      tool-commit: ec71deac0b4232132130021037482b3f97670805
+      manifest: vendor.lock.json
+    secrets:
+      update-token: ${{ secrets.VENDOR_UPDATE_TOKEN }}
