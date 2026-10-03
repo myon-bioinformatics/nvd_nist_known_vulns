@@ -1,4 +1,4 @@
-"""Keep verification and proposal workflows on the same reviewed tool."""
+"""CI updates public vendor files without token or repository writes."""
 from pathlib import Path
 import re
 import unittest
@@ -8,17 +8,26 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class VendorWorkflowTests(unittest.TestCase):
-    def test_tool_and_reusable_workflow_pins_match(self):
-        placement = (ROOT / '.github/workflows/python.yml').read_text()
-        proposals = (ROOT / '.github/workflows/vendor-update.yml').read_text()
-        checkout = re.findall(r'^          ref: ([0-9a-f]{40})$', placement, re.M)
-        workflow = re.findall(r'reusable-vendor-update\.yml@([0-9a-f]{40})', proposals)
-        tool = re.findall(r'^      tool-commit: ([0-9a-f]{40})$', proposals, re.M)
-        self.assertEqual(len(checkout), 1)
-        self.assertEqual(checkout, workflow)
-        self.assertEqual(checkout, tool)
-        self.assertIn("if: vars.VENDOR_UPDATES_ENABLED == 'true'", proposals)
-        self.assertIn('update-token: ${{ secrets.VENDOR_UPDATE_TOKEN }}', proposals)
+    def test_public_updates_run_before_tests_without_write_credentials(self):
+        ci = (ROOT / '.github/workflows/python.yml').read_text(encoding='utf-8')
+        self.assertEqual(len(re.findall(r'^          ref: [0-9a-f]{40}$', ci, re.M)), 1)
+        self.assertFalse((ROOT / '.github/workflows/vendor-update.yml').exists())
+        self.assertIn('options: [update, locked]', ci)
+        self.assertIn('default: update', ci)
+        self.assertIn("if: inputs.vendor-mode != 'locked'", ci)
+        restore = ci.index('vendor_sync.py materialize')
+        update = ci.index('vendor_sync.py update')
+        check = ci.index('vendor_sync.py check', update)
+        test = ci.index('python -S -m unittest', check)
+        self.assertLess(restore, update)
+        self.assertLess(update, check)
+        self.assertLess(check, test)
+        self.assertEqual(ci.count('persist-credentials: false'), 2)
+        for forbidden in ('contents: write', 'pull-requests: write',
+                          'VENDOR_UPDATE_TOKEN', 'VENDOR_UPDATES_ENABLED',
+                          'update-token:', 'GH_TOKEN', 'git push', 'git commit',
+                          'gh pr', 'continue-on-error'):
+            self.assertNotIn(forbidden, ci)
 
 
 if __name__ == '__main__':
