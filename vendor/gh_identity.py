@@ -129,23 +129,36 @@ def resolve_ref(r,ref,transport="auto",timeout=30):
  sha=d.get("sha") if isinstance(d,dict) else None
  if not isinstance(sha,str) or not re.fullmatch(r"[0-9a-fA-F]{40}",sha):raise Error("invalid_commit")
  return {"schema":"gh-identity-ref/1","repository":r,"ref":ref,"sha":sha.lower(),"observed_at":now()}
+def _min_checks(value):
+ if not isinstance(value,int) or isinstance(value,bool) or value<1:raise ValueError("min_checks must be at least 1")
+ return value
+
+def summarize_checks(rows,expected_count,min_checks=1):
+ min_checks=_min_checks(min_checks)
+ if not isinstance(rows,list):raise ValueError("check rows must be a list")
+ normalized=[{"id":x.get("id"),"name":x.get("name"),"status":x.get("status"),"conclusion":x.get("conclusion"),"url":x.get("url") or x.get("html_url"),"annotations_count":x.get("annotations_count",(x.get("output")or{}).get("annotations_count",0))} for x in rows]
+ complete=isinstance(expected_count,int) and not isinstance(expected_count,bool) and expected_count==len(normalized)
+ bad={"failure","cancelled","timed_out","action_required","startup_failure","stale"}
+ if not complete:state="incomplete"
+ elif len(normalized)<min_checks:state="pending"
+ elif any(x["status"]!="completed" for x in normalized):state="pending"
+ elif any(x["conclusion"] in bad for x in normalized):state="failed"
+ elif not any(x["conclusion"]=="success" for x in normalized):state="failed"
+ else:state="green"
+ return {"state":state,"complete":complete,"expected_count":expected_count,"count":len(normalized),"min_checks":min_checks,"checks":normalized}
+
 def checks_for_sha(r,sha,min_checks=1,transport="auto",timeout=30):
+ min_checks=_min_checks(min_checks)
  r=repo(r);rows=[];page=1;expected=None
  while True:
   d=request("GET",f"repos/{r}/commits/{sha}/check-runs?per_page=100&page={page}",transport=transport,timeout=timeout)
   if not isinstance(d,dict) or not isinstance(d.get("check_runs"),list):raise Error("invalid_json")
   if expected is None:expected=d.get("total_count")
-  batch=d["check_runs"];rows += [{"id":x.get("id"),"name":x.get("name"),"status":x.get("status"),"conclusion":x.get("conclusion"),"url":x.get("html_url")} for x in batch]
-  if len(batch)<100:break
+  rows += d["check_runs"]
+  if len(d["check_runs"])<100:break
   page+=1
- complete=isinstance(expected,int) and expected==len(rows)
- bad={"failure","cancelled","timed_out","action_required","startup_failure","stale"}
- if not complete:state="incomplete"
- elif len(rows)<min_checks:state="pending"
- elif any(x["status"]!="completed" for x in rows):state="pending"
- elif any(x["conclusion"] in bad for x in rows):state="failed"
- else:state="green"
- return {"schema":"gh-identity-checks/1","repository":r,"sha":sha,"state":state,"complete":complete,"expected_count":expected,"count":len(rows),"min_checks":min_checks,"checks":rows,"observed_at":now()}
+ summary=summarize_checks(rows,expected,min_checks)
+ return {"schema":"gh-identity-checks/1","repository":r,"sha":sha,**summary,"observed_at":now()}
 
 def observe_pr(r,n,min_checks=1,transport="auto",timeout=30):
  before=pr(r,n,transport=transport,timeout=timeout)
@@ -166,6 +179,35 @@ def gh_help(*parts,timeout=15):
  except OSError as e:raise Error("process_error") from e
  if p.returncode:raise Error("gh_failed")
  return p.stdout
+
+def local_identity(*,cwd=None,identity=None,env=None):
+ env=os.environ if env is None else env
+ if identity is not None:
+  sha=identity.get("sha")
+  if sha is not None and not re.fullmatch(r"[0-9a-fA-F]{40}",str(sha)):raise ValueError("invalid local sha")
+  return {"schema":"gh-identity-local/1","sha":str(sha).lower() if sha else None,"ref":identity.get("ref"),"dirty":identity.get("dirty"),"source":identity.get("source","provided"),"observed_at":now()}
+ sha=env.get("GITHUB_SHA")
+ ref=env.get("GITHUB_HEAD_REF") or env.get("GITHUB_REF_NAME")
+ if sha and re.fullmatch(r"[0-9a-fA-F]{40}",sha):
+  return {"schema":"gh-identity-local/1","sha":sha.lower(),"ref":ref,"dirty":None,"source":"github-env","observed_at":now()}
+ if shutil.which("git") is None:
+  return {"schema":"gh-identity-local/1","sha":None,"ref":None,"dirty":None,"source":"unavailable","observed_at":now()}
+ root=cwd or os.getcwd()
+ def git(*args):
+  p=subprocess.run(["git",*args],cwd=root,capture_output=True,text=True,encoding="utf-8",check=False)
+  if p.returncode:raise Error("git_failed")
+  return p.stdout.strip()
+ sha=git("rev-parse","HEAD")
+ if not re.fullmatch(r"[0-9a-fA-F]{40}",sha):raise Error("invalid_commit")
+ ref=git("branch","--show-current") or None
+ dirty=bool(git("status","--porcelain"))
+ return {"schema":"gh-identity-local/1","sha":sha.lower(),"ref":ref,"dirty":dirty,"source":"git","observed_at":now()}
+
+def compare_sha(local,remote_sha):
+ lsha=local.get("sha") if isinstance(local,dict) else None
+ lsha=str(lsha).lower() if lsha else None
+ rsha=str(remote_sha).lower() if remote_sha else None
+ return {"schema":"gh-identity-comparison/1","local_sha":lsha,"remote_sha":rsha,"comparable":bool(lsha and rsha),"same":(lsha==rsha) if lsha and rsha else None,"observed_at":now()}
 
 def main(argv=None):
  argv=list(sys.argv[1:] if argv is None else argv)
