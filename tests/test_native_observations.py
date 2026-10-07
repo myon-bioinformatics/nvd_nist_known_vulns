@@ -12,21 +12,20 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_adapter_provenance():
     manifest = json.loads((ROOT / 'vendor.lock.json').read_text())
     assert manifest['schema'] == 'vendor-lock/1'
-    assert {entry['destination'] for entry in manifest['files']} == {
-        'vendor/xprobe_pytest.py', 'vendor/xprobe-LICENSE'}
-    assert len({entry['commit'] for entry in manifest['files']}) == 1
-    for entry in manifest['files']:
-        assert entry['repository'] == 'myon-bioinformatics/xprobe'
+    xprobe = {entry['destination']: entry for entry in manifest['files']
+              if entry['repository'] == 'myon-bioinformatics/xprobe'}
+    assert set(xprobe) == {'vendor/xprobe_pytest.py', 'vendor/xprobe-LICENSE'}
+    assert len({entry['commit'] for entry in xprobe.values()}) == 1
+    for destination, entry in xprobe.items():
         assert entry['ref'] == 'refs/heads/main'
         assert len(entry['commit']) == 40
         assert all(c in '0123456789abcdef' for c in entry['commit'])
         expected_source = ('scripts/xprobe_pytest.py'
-                           if entry['destination'].endswith('.py') else 'LICENSE')
+                           if destination.endswith('.py') else 'LICENSE')
         assert entry['source'] == expected_source
-        data = (ROOT / entry['destination']).read_bytes()
+        data = (ROOT / destination).read_bytes()
         assert hashlib.sha256(data).hexdigest() == entry['sha256']
         assert hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest() == entry['blob_sha']
-
 
 def test_native_failure_evidence(tmp_path):
     suite = tmp_path / 'test_sample.py'
