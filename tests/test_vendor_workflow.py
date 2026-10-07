@@ -33,7 +33,7 @@ def test_public_vendor_ci_updates_without_repository_writes():
         upload = next(s for s in steps if s.get('name') == name)
         assert upload['if'] == 'always()'
         assert upload['with']['if-no-files-found'] == 'error'
-        assert set(upload['with']['path'].splitlines()) == {'vendor.lock.json', 'vendor/'}
+        assert set(upload['with']['path'].splitlines()) == {'vendor.lock.json', 'vendor/', "${{ inputs.vendor-mode != 'locked' && 'vendor-promotion.json' || '' }}"}
     pins = [s['with']['ref'] for steps in (resolve, test) for s in steps
             if s.get('with', {}).get('repository') == 'myon-bioinformatics/myon-bioinformatics']
     assert len(pins) == 2 and len(set(pins)) == 1
