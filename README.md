@@ -3,9 +3,13 @@
 **Python compatibility:** CI-tested on Python 3.9–3.14.
 Single-file, Python-standard-library client for the NVD CVE API 2.0. It fetches vulnerabilities for CPE 2.3 names and emits deterministic JSON Lines suitable for CLI use, CI, offline processing, and cross-repository adapters.
 
+NVD’s public CVE REST stem remains `/rest/json/cves/2.0` (a `/cves/3.0` probe returns 404). This client stays on 2.0 and adds CVSS v3-series request filters plus local CVSS base-score calculation for v2 / v3.0 / v3.1 vectors.
+
 ## Features
 
 - NVD CVE API 2.0 with exact `cpeName` queries.
+- Optional CVSS v3-series filters: `--cvss-v3-severity` / `--cvss-v3-metrics` (NVD `cvssV3Severity` / `cvssV3Metrics`).
+- Local CVSS base-score calculation for v2.0 / v3.0 / v3.1 vector strings (`calculate_cvss_base`); metric records also carry `calculated_base_score` when a vector is present.
 - No third-party runtime dependencies.
 - Pagination: results are not silently truncated to one page.
 - Optional `NVD_API_KEY` header support.
@@ -29,6 +33,7 @@ cpe2 = cpe:2.3:a:apache:log4j:1.2:-:*:*:*:*:*:*
 python nvd_nist_known_vulns.py
 python nvd_nist_known_vulns.py --silent --output result.jsonl
 python nvd_nist_known_vulns.py --config other.ini --timeout 30
+python nvd_nist_known_vulns.py --cvss-v3-severity CRITICAL
 ```
 
 An NVD API key is optional. When supplied it is read from the environment and sent as an HTTP header, not placed in the URL:
@@ -39,9 +44,9 @@ NVD_API_KEY=... python nvd_nist_known_vulns.py
 
 ## Reuse contract
 
-The module is intentionally kept as one stdlib-only file. Other repositories may import `api_call`, `iter_cve_pages`, `format_cve_data`, `fetch_cves`, `parse_jsonl`, `read_jsonl`, or `select_cpe_records`. The JSONL helpers validate completion evidence, distinguish an unmeasured/incomplete CPE from a measured zero-result CPE, and deduplicate a CVE that matches multiple selected CPEs. Network access is isolated from normalization so consumers can use captured NVD JSON fixtures in tests.
+The module is intentionally kept as one stdlib-only file. Other repositories may import `api_call`, `iter_cve_pages`, `format_cve_data`, `fetch_cves`, `calculate_cvss_base`, `parse_jsonl`, `read_jsonl`, or `select_cpe_records`. The JSONL helpers validate completion evidence, distinguish an unmeasured/incomplete CPE from a measured zero-result CPE, and deduplicate a CVE that matches multiple selected CPEs. Network access is isolated from normalization so consumers can use captured NVD JSON fixtures in tests. `calculate_cvss_base` is pure and offline; it implements FIRST CVSS v2 / v3.0 / v3.1 base equations and rejects v4 MacroVector lookup vectors.
 
-The emitted JSONL schema is versioned as `nvd-cve-summary/1`. Records use `kind: "cve"` or `kind: "query_complete"`. A successful CPE query emits its CVE records first and exactly one `query_complete` record afterward, including when the result count is zero. A completion record is emitted only after pagination has been validated as complete; if it is absent, consumers must treat that CPE as not measured or failed rather than as zero vulnerabilities. Early v1 CVE records without `kind` may be treated as `cve`. V1 consumers must dispatch on `kind` and ignore unknown kinds so future additive record kinds do not break them. Additive fields and record kinds following that rule may be introduced within v1; other incompatible shape changes require a new schema version. NVD `published` and `lastModified` timestamps are UTC values as supplied by NVD. CVSS selection prefers a `Primary` metric and records its `source` and `type`.
+The emitted JSONL schema is versioned as `nvd-cve-summary/1`. Records use `kind: "cve"` or `kind: "query_complete"`. A successful CPE query emits its CVE records first and exactly one `query_complete` record afterward, including when the result count is zero. A completion record is emitted only after pagination has been validated as complete; if it is absent, consumers must treat that CPE as not measured or failed rather than as zero vulnerabilities. Early v1 CVE records without `kind` may be treated as `cve`. V1 consumers must dispatch on `kind` and ignore unknown kinds so future additive record kinds do not break them. Additive fields and record kinds following that rule may be introduced within v1; other incompatible shape changes require a new schema version. NVD `published` and `lastModified` timestamps are UTC values as supplied by NVD. CVSS selection prefers a `Primary` metric and records its `source` and `type`. When a metric includes a calculable vector, the record also adds `calculated_base_score` and `calculated_base_severity` beside the NVD-supplied score.
 
 Network calls are throttled conservatively (6 seconds without an API key; 0.6 seconds with one). Transient 429/5xx responses and unauthenticated 403 responses are retried with bounded backoff. `--output` is written atomically: a failed run leaves an existing output file unchanged.
 
