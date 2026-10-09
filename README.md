@@ -101,3 +101,12 @@ restrictions do not supply completion, counts or CVE IDs. A snapshot with only
 filtered evidence returns `not_measured`, and mixed snapshots use only the
 unfiltered evidence. Consumers needing filtered results can inspect the explicit
 filtered records returned by `parse_jsonl`.
+
+The v1 additive-field policy does not make measurement identity open-ended.
+For unfiltered `cve` and `query_complete` records, `query` must contain exactly
+`cpe_name`; extra keys are intentionally rejected by `parse_jsonl`, even when
+a producer considers them metadata. This tightens the earlier reader's
+acceptance of extra query keys so an unknown restriction cannot certify an
+unfiltered measurement. Put additive descriptive metadata outside `query`.
+Filtered kinds use the explicit, validated `cpe_name` plus `filters` shape;
+unknown record kinds remain ignored as required by the v1 contract.
