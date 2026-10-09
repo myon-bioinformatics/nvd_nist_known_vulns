@@ -412,6 +412,36 @@ def fetch_cves(
 
 
 
+def _query(cpe: str, severity: str | None = None, metrics: str | None = None) -> dict[str, Any]:
+    """Bind completion evidence to the normalized request scope."""
+    filters: dict[str, str] = {}
+    if severity is not None:
+        if not isinstance(severity, str) or severity.strip().upper() not in ("LOW", "MEDIUM", "HIGH", "CRITICAL"):
+            raise ValueError("invalid CVSS v3 severity filter")
+        filters["cvss_v3_severity"] = severity.strip().upper()
+    if metrics is not None:
+        if not isinstance(metrics, str) or not metrics.strip():
+            raise ValueError("invalid CVSS v3 metrics filter")
+        filters["cvss_v3_metrics"] = metrics.strip().upper()
+    query: dict[str, Any] = {"cpe_name": cpe}
+    if filters:
+        query["filters"] = filters
+    return query
+
+
+def _validate_query_scope(query: dict[str, Any], kind: str) -> None:
+    filtered = kind.startswith("filtered_")
+    filters = query.get("filters")
+    if filtered:
+        if not isinstance(filters, dict) or not filters or set(filters) - {"cvss_v3_severity", "cvss_v3_metrics"}:
+            raise ValueError("filtered NVD record requires explicit supported filters")
+        normalized = _query(query["cpe_name"], filters.get("cvss_v3_severity"), filters.get("cvss_v3_metrics"))
+        if normalized != query:
+            raise ValueError("noncanonical filtered NVD query")
+    elif set(query) != {"cpe_name"}:
+        raise ValueError("unfiltered NVD record cannot carry query restrictions")
+
+
 def parse_jsonl(text: str) -> list[dict[str, Any]]:
     """Parse nvd-cve-summary/1 JSONL while preserving Unicode line separators."""
     records: list[dict[str, Any]] = []
@@ -429,11 +459,13 @@ def parse_jsonl(text: str) -> list[dict[str, Any]]:
         if not isinstance(cpe, str) or not cpe:
             raise ValueError(f"incomplete NVD record at line {line_number}")
         kind = record.get("kind", "cve")
-        if kind == "cve":
+        if kind in ("cve", "filtered_cve"):
+            _validate_query_scope(query, kind)
             cve_id = record.get("id")
             if not isinstance(cve_id, str) or not cve_id.startswith("CVE-"):
                 raise ValueError(f"incomplete NVD CVE record at line {line_number}")
-        elif kind == "query_complete":
+        elif kind in ("query_complete", "filtered_query_complete"):
+            _validate_query_scope(query, kind)
             count = record.get("cve_count")
             if isinstance(count, bool) or not isinstance(count, int) or count < 0:
                 raise ValueError(f"incomplete NVD completion record at line {line_number}")
@@ -454,11 +486,12 @@ def read_jsonl(path: str | Path) -> list[dict[str, Any]]:
 def select_cpe_records(
     records: Iterable[dict[str, Any]], cpe_names: Iterable[str]
 ) -> dict[str, Any]:
-    """Validate completion evidence and return deduplicated CVEs for selected CPEs."""
+    """Validate unfiltered completion evidence; filtered results never certify all CVEs."""
     cpes = sorted(set(cpe_names))
     if not cpes or not all(isinstance(cpe, str) and cpe.startswith("cpe:2.3:") for cpe in cpes):
         raise ValueError("cpe_names must contain explicit CPE 2.3 names")
-    rows = list(records)
+    rows = [row for row in records
+            if isinstance(row.get("query"), dict) and set(row["query"]) == {"cpe_name"}]
     completions: dict[str, int] = {}
     for row in rows:
         if row.get("kind") == "query_complete" and row.get("query", {}).get("cpe_name") in cpes:
@@ -501,16 +534,19 @@ def read_ini(path: str = "config.ini") -> list[str]:
     return [value.strip() for _, value in config["cpeName"].items() if value.strip()]
 
 
-def _record(cpe: str, record: dict[str, Any]) -> str:
-    return json.dumps({"schema": SCHEMA_VERSION, "kind": "cve", "query": {"cpe_name": cpe}, **record}, ensure_ascii=False, sort_keys=True)
+def _record(cpe: str, record: dict[str, Any], *, severity: str | None = None, metrics: str | None = None) -> str:
+    query = _query(cpe, severity, metrics)
+    kind = "filtered_cve" if "filters" in query else "cve"
+    return json.dumps({**record, "schema": SCHEMA_VERSION, "kind": kind, "query": query}, ensure_ascii=False, sort_keys=True)
 
 
-def _completion_record(cpe: str, cve_count: int) -> str:
-    """Emit positive evidence that a configured CPE query completed, including zero results."""
+def _completion_record(cpe: str, cve_count: int, *, severity: str | None = None, metrics: str | None = None) -> str:
+    """Emit completion only for the explicitly recorded request scope."""
+    query = _query(cpe, severity, metrics)
+    kind = "filtered_query_complete" if "filters" in query else "query_complete"
     return json.dumps(
-        {"schema": SCHEMA_VERSION, "kind": "query_complete", "query": {"cpe_name": cpe}, "cve_count": cve_count},
-        ensure_ascii=False,
-        sort_keys=True,
+        {"schema": SCHEMA_VERSION, "kind": kind, "query": query, "cve_count": cve_count},
+        ensure_ascii=False, sort_keys=True,
     )
 
 def main(argv: list[str] | None = None) -> int:
@@ -532,6 +568,9 @@ def main(argv: list[str] | None = None) -> int:
     temp_path: Path | None = None
     stream: Any = sys.stdout
     try:
+        scope = _query("scope", args.cvss_v3_severity, args.cvss_v3_metrics).get("filters", {})
+        severity = scope.get("cvss_v3_severity")
+        metrics = scope.get("cvss_v3_metrics")
         cpes = read_ini(args.config)
         if args.output:
             target = Path(args.output)
@@ -545,12 +584,12 @@ def main(argv: list[str] | None = None) -> int:
                 cpe,
                 api_key=os.environ.get("NVD_API_KEY"),
                 timeout=args.timeout,
-                cvss_v3_severity=args.cvss_v3_severity,
-                cvss_v3_metrics=args.cvss_v3_metrics,
+                cvss_v3_severity=severity,
+                cvss_v3_metrics=metrics,
             )
             for record in records:
-                print(_record(cpe, record), file=stream)
-            print(_completion_record(cpe, len(records)), file=stream)
+                print(_record(cpe, record, severity=severity, metrics=metrics), file=stream)
+            print(_completion_record(cpe, len(records), severity=severity, metrics=metrics), file=stream)
         if args.output:
             stream.close()
             Path(temp_path).replace(args.output)

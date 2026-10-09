@@ -81,3 +81,23 @@ MIT
 Install test-only tools with `python -m pip install -r tests/requirements.txt`.
 CI preserves native pytest JSONL and JUnit while retaining the `python -S`
 runtime isolation lane. See [recording and exploration](docs/pytest-observations.md).
+
+
+### Filtered query completion
+
+CVSS-filtered requests emit `filtered_cve` and `filtered_query_complete` kinds
+within `nvd-cve-summary/1`. Both carry the same `query.filters`, using
+`cvss_v3_severity` and/or `cvss_v3_metrics`; values are trimmed and uppercased
+before both the request and JSONL output. The completion count belongs only to
+that filtered request, including zero results. Unfiltered output keeps its
+existing `cve` / `query_complete` kinds and CPE-only query unchanged.
+
+This kind separation is required for older v1 readers, which ignore unknown
+kinds: merely adding filter fields to `query_complete` would let them mistake
+a filtered zero for a complete unfiltered measurement. `parse_jsonl` understands
+the new kinds and rejects missing, invalid or ambiguous filter scopes.
+`select_cpe_records` remains an **unfiltered** selector: filtered rows and query
+restrictions do not supply completion, counts or CVE IDs. A snapshot with only
+filtered evidence returns `not_measured`, and mixed snapshots use only the
+unfiltered evidence. Consumers needing filtered results can inspect the explicit
+filtered records returned by `parse_jsonl`.
