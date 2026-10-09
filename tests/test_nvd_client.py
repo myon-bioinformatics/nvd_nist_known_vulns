@@ -31,6 +31,58 @@ class Tests(unittest.TestCase):
         m=nvd.format_cve_data(p)["CVE-T-3"]["cvss_v3"]
         self.assertEqual((m["base_score"],m["source"],m["type"]),(9.8,"nvd@nist.gov","Primary"))
 
+    def test_calculate_cvss_base_v3_known_vectors(self):
+        cases = [
+            ("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", 9.8, "CRITICAL"),
+            ("CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", 9.8, "CRITICAL"),
+            ("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H", 10.0, "CRITICAL"),
+            ("CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H", 7.8, "HIGH"),
+            ("CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:L/I:L/A:N", 3.8, "LOW"),
+        ]
+        for vector, score, severity in cases:
+            with self.subTest(vector=vector):
+                result = nvd.calculate_cvss_base(vector)
+                self.assertEqual(result["base_score"], score)
+                self.assertEqual(result["base_severity"], severity)
+
+    def test_calculate_cvss_base_v2_and_rejects_v4(self):
+        result = nvd.calculate_cvss_base("AV:N/AC:L/Au:N/C:C/I:C/A:C")
+        self.assertEqual((result["version"], result["base_score"], result["base_severity"]), ("2.0", 10.0, "HIGH"))
+        with self.assertRaises(ValueError):
+            nvd.calculate_cvss_base("CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N")
+
+    def test_metric_includes_calculated_score_from_vector(self):
+        p = {
+            "vulnerabilities": [{
+                "cve": {
+                    "id": "CVE-T-4",
+                    "metrics": {
+                        "cvssMetricV31": [{
+                            "source": "nvd@nist.gov",
+                            "type": "Primary",
+                            "cvssData": {
+                                "version": "3.1",
+                                "baseScore": 9.8,
+                                "baseSeverity": "CRITICAL",
+                                "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                            },
+                        }],
+                    },
+                },
+            }],
+        }
+        m = nvd.format_cve_data(p)["CVE-T-4"]["cvss_v3"]
+        self.assertEqual(m["calculated_base_score"], 9.8)
+        self.assertEqual(m["calculated_base_severity"], "CRITICAL")
+
+    def test_api_call_includes_cvss_v3_filters(self):
+        with mock.patch.object(nvd, "_request_json", return_value={"ok": True}) as request:
+            nvd.api_call("cpe:test", cvss_v3_severity="HIGH", cvss_v3_metrics="AV:N/AC:L")
+        url = request.call_args.args[0]
+        self.assertIn("cpeName=cpe%3Atest", url)
+        self.assertIn("cvssV3Severity=HIGH", url)
+        self.assertIn("cvssV3Metrics=AV%3AN%2FAC%3AL", url)
+
     def test_pagination_and_zero_page(self):
         pages=[{"totalResults":3,"vulnerabilities":[{"cve":{"id":"A"}},{"cve":{"id":"B"}}]},{"totalResults":3,"vulnerabilities":[{"cve":{"id":"C"}}]}]
         with mock.patch.object(nvd,"api_call",side_effect=pages) as call: self.assertEqual(len(list(nvd.iter_cve_pages("cpe"))),2)
