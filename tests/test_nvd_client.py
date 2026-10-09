@@ -51,6 +51,53 @@ class Tests(unittest.TestCase):
         with self.assertRaises(ValueError):
             nvd.calculate_cvss_base("CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N")
 
+    def test_cvss_vector_separator_regressions(self):
+        vectors = (
+            "AV:N/AC:L/Au:N/C:C/I:C/A:C",
+            "CVSS:2.0/AV:N/AC:L/Au:N/C:C/I:C/A:C",
+            "CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+            "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+        )
+        for vector in vectors:
+            # Exercise every boundary, including the version-prefix boundary.
+            malformed = ["/" + vector, vector + "/", vector + "//"]
+            malformed.extend(vector[:i] + "/" + vector[i:]
+                             for i, char in enumerate(vector) if char == "/")
+            for invalid in malformed:
+                with self.subTest(vector=invalid):
+                    with self.assertRaisesRegex(ValueError, "^malformed CVSS vector: empty segment$"):
+                        nvd.calculate_cvss_base(invalid)
+
+    def test_cvss_duplicate_and_missing_metrics_are_distinct(self):
+        for version in ("2.0", "3.0", "3.1"):
+            metrics = ("AV:N/AC:L/Au:N/C:C/I:C/A:C" if version == "2.0"
+                       else "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
+            prefix = "CVSS:" + version + "/"
+            for metric in metrics.split("/"):
+                key = metric.split(":")[0]
+                with self.subTest(version=version, key=key):
+                    with self.assertRaisesRegex(ValueError, "^duplicate CVSS metric: " + key + "$"):
+                        nvd.calculate_cvss_base(prefix + metrics + "/" + metric)
+                    remaining = [part for part in metrics.split("/") if part != metric]
+                    with self.assertRaisesRegex(ValueError, "missing metrics: " + key + "$"):
+                        nvd.calculate_cvss_base(prefix + "/".join(remaining))
+            # Conflicting duplicates must not silently replace the first value.
+            with self.assertRaisesRegex(ValueError, "^duplicate CVSS metric: AV$"):
+                nvd.calculate_cvss_base(prefix + metrics + "/AV:L")
+
+    def test_cvss_valid_vector_compatibility(self):
+        v2 = "AV:N/AC:L/Au:N/C:C/I:C/A:C"
+        for vector in (v2, "CVSS:2.0/" + v2, v2 + "/E:ND/RL:ND/RC:ND"):
+            with self.subTest(vector=vector):
+                self.assertEqual(nvd.calculate_cvss_base(vector),
+                                 {"version": "2.0", "base_score": 10.0, "base_severity": "HIGH"})
+        # FIRST v3 section 6 requires arbitrary metric order and optional metrics.
+        for version in ("3.0", "3.1"):
+            vector = "CVSS:" + version + "/S:U/AV:N/AC:L/PR:H/UI:N/C:L/I:L/A:N/E:F/RL:X"
+            with self.subTest(version=version):
+                self.assertEqual(nvd.calculate_cvss_base(vector),
+                                 {"version": version, "base_score": 3.8, "base_severity": "LOW"})
+
     def test_metric_includes_calculated_score_from_vector(self):
         p = {
             "vulnerabilities": [{

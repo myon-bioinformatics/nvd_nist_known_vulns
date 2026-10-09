@@ -74,9 +74,10 @@ def _parse_cvss_metrics(vector: str) -> tuple[str | None, dict[str, str]]:
     text = vector.strip()
     if not text:
         raise ValueError("CVSS vector is empty")
-    parts = [part for part in text.split("/") if part]
-    if not parts:
-        raise ValueError(f"malformed CVSS vector: {vector!r}")
+    parts = text.split("/")
+    # FIRST vectors use '/' between metrics, never as an empty metric.
+    if any(not part for part in parts):
+        raise ValueError("malformed CVSS vector: empty segment")
     version: str | None = None
     metrics: dict[str, str] = {}
     start = 0
