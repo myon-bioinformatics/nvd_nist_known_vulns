@@ -11,7 +11,7 @@ job downloads that same snapshot, verifies it offline, then tests it. Upstream
 changes during the matrix cannot select different source commits.
 
 CI uses the shared stdlib tool at
-`08dc3757deeb930c950bdcc6bd55ec3112ba49fc`. It checks the baseline copies,
+`380d877cd85837f36cf6030d626ee8bb7dfa28cb`. It checks the baseline copies,
 restores them from locked commits, then **automatically promotes** the allowlisted
 files from their public upstream refs and runs the existing tests. Each upstream
 ref resolves once per workflow run; the resulting full SHA and hashes are
@@ -25,7 +25,7 @@ same commands after checking out the pinned shared tool in `.vendor-sync-tools`:
 
 ```sh
 git clone https://github.com/myon-bioinformatics/myon-bioinformatics.git .vendor-sync-tools
-git -C .vendor-sync-tools checkout 08dc3757deeb930c950bdcc6bd55ec3112ba49fc
+git -C .vendor-sync-tools checkout 380d877cd85837f36cf6030d626ee8bb7dfa28cb
 python -S .vendor-sync-tools/vendor_sync.py check
 python -S .vendor-sync-tools/vendor_sync.py materialize
 python -S .vendor-sync-tools/vendor_sync.py promote
@@ -49,3 +49,23 @@ main. Existing test failures retain their exit status and evidence. Download,
 hash-verification or unrecoverable fetch failures fail the update and CI; they never
 silently fall back to old files. Existing JUnit/native artifact handling and
 runtime policies are unchanged.
+
+
+## Lock-derived evidence staging
+
+Vendor artifact membership is now derived exclusively by the parent
+`vendor_stage.py`, checked out with `vendor_sync.py` at full commit
+`380d877cd85837f36cf6030d626ee8bb7dfa28cb`. Workflow uploads point to its generated
+directory; adding a locked source or LICENSE needs no upload path-list edit.
+Artifact names and repository-relative paths inside each artifact are preserved.
+`vendor-evidence.json` is additional metadata with byte hashes and separate
+locked/candidate, runtime receipt, and legacy projection classifications.
+
+Staging runs even after a failed test, verifies every locked byte, and fails
+nonzero on missing or modified members. It does not certify tests or promotion.
+Locked runs exclude promotion receipts; candidate runs include one when present.
+Legacy projection formats, when present, remain consumer-owned outputs of the
+lock. Exact source pins, LICENSEs, test-only dependencies and Pages/MCP/runtime
+behavior are unchanged. Central topology intent is owned by the parent's
+`vendor-consumers.json`; recommended baselines belong to `vendor-catalog.json`;
+this consumer's lock remains the authority for adopted bytes.
