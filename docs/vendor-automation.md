@@ -11,12 +11,13 @@ job downloads that same snapshot, verifies it offline, then tests it. Upstream
 changes during the matrix cannot select different source commits.
 
 CI uses the shared stdlib tool at
-`37f30d5acdc1906d4acbd103ce6f652bc13ca7eb`. It checks the baseline copies,
-restores them from locked commits, then **automatically updates** the allowlisted
+`08dc3757deeb930c950bdcc6bd55ec3112ba49fc`. It checks the baseline copies,
+restores them from locked commits, then **automatically promotes** the allowlisted
 files from their public upstream refs and runs the existing tests. Each upstream
 ref resolves once per workflow run; the resulting full SHA and hashes are
 recorded in the CI checkout before tests run. A separate Actions artifact
-preserves the lock and vendor bytes used by that run, including when tests fail. Unchanged selected bytes do not
+preserves the lock, optional `vendor-promotion.json` receipt, and vendor bytes
+used by that run, including when tests fail. Unchanged selected bytes do not
 churn the baseline pins. The updater itself stays at its reviewed full SHA.
 
 There is no manual step required for normal push/PR CI. An ALM agent can use the
@@ -24,17 +25,18 @@ same commands after checking out the pinned shared tool in `.vendor-sync-tools`:
 
 ```sh
 git clone https://github.com/myon-bioinformatics/myon-bioinformatics.git .vendor-sync-tools
-git -C .vendor-sync-tools checkout 37f30d5acdc1906d4acbd103ce6f652bc13ca7eb
+git -C .vendor-sync-tools checkout 08dc3757deeb930c950bdcc6bd55ec3112ba49fc
 python -S .vendor-sync-tools/vendor_sync.py check
 python -S .vendor-sync-tools/vendor_sync.py materialize
-python -S .vendor-sync-tools/vendor_sync.py update
+python -S .vendor-sync-tools/vendor_sync.py promote
 python -S .vendor-sync-tools/vendor_sync.py check
 python -S -m unittest discover -s tests -v
 python -m pytest tests
 ```
 
 A dispatch caller may select `vendor-mode=locked` to test only the recorded
-baseline; default dispatch and ordinary push/PR CI use `update`. Offline local
+baseline; default dispatch and ordinary push/PR CI use `update` mode, which runs
+`promote` and keeps a `vendor-promotion.json` receipt. Offline local
 pytest continues to use checked-in copies and does not initiate downloads.
 
 Public source and metadata downloads are anonymous. API 403/429 uses a
