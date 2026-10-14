@@ -17,7 +17,7 @@ def test_adapter_provenance():
     assert set(xprobe) == {'vendor/xprobe_pytest.py', 'vendor/xprobe-LICENSE'}
     assert len({entry['commit'] for entry in xprobe.values()}) == 1
     for destination, entry in xprobe.items():
-        assert entry['ref'] == 'refs/heads/main'
+        assert entry['ref'] == entry['commit']
         assert len(entry['commit']) == 40
         assert all(c in '0123456789abcdef' for c in entry['commit'])
         expected_source = ('scripts/xprobe_pytest.py'
