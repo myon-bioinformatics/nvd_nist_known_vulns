@@ -3,7 +3,7 @@
   "files": [
     {
       "repository": "myon-bioinformatics/xprobe",
-      "ref": "refs/heads/main",
+      "ref": "326acd667e13b21bf53ccc1590af960edf8cbf6c",
       "commit": "326acd667e13b21bf53ccc1590af960edf8cbf6c",
       "source": "scripts/xprobe_pytest.py",
       "destination": "vendor/xprobe_pytest.py",
@@ -12,7 +12,7 @@
     },
     {
       "repository": "myon-bioinformatics/xprobe",
-      "ref": "refs/heads/main",
+      "ref": "326acd667e13b21bf53ccc1590af960edf8cbf6c",
       "commit": "326acd667e13b21bf53ccc1590af960edf8cbf6c",
       "source": "LICENSE",
       "destination": "vendor/xprobe-LICENSE",
@@ -21,7 +21,7 @@
     },
     {
       "repository": "myon-bioinformatics/gh_identity",
-      "ref": "refs/heads/main",
+      "ref": "fc2c527257b12eb99c00637bbae74f8988fd6bf4",
       "commit": "fc2c527257b12eb99c00637bbae74f8988fd6bf4",
       "source": "gh_identity.py",
       "destination": "vendor/gh_identity.py",
@@ -30,7 +30,7 @@
     },
     {
       "repository": "myon-bioinformatics/gh_identity",
-      "ref": "refs/heads/main",
+      "ref": "fc2c527257b12eb99c00637bbae74f8988fd6bf4",
       "commit": "fc2c527257b12eb99c00637bbae74f8988fd6bf4",
       "source": "LICENSE",
       "destination": "vendor/gh_identity-LICENSE",
