@@ -14,7 +14,9 @@ def test_public_vendor_ci_locked_without_repository_writes():
     test = jobs['test']['steps']
     assert not any(s.get('name') == 'Update public vendor files for this run' for s in resolve)
     assert 'inputs' not in ci.get('on', {}).get('workflow_dispatch', {})
-    assert jobs['test']['needs'] == 'resolve-vendor'
+    assert set(jobs['test']['needs']) == {'changes', 'resolve-vendor'}
+    assert jobs['resolve-vendor']['needs'] == 'changes'
+    assert jobs['test']['if'] == "needs.changes.outputs.product_changed == 'true'"
     assert not any('vendor_sync.py promote' in s.get('run', '') for steps in (resolve, test) for s in steps)
     assert not any('vendor_sync.py update' in s.get('run', '') for steps in (resolve, test) for s in steps)
     download = next(i for i,s in enumerate(test) if s.get('uses', '').startswith('actions/download-artifact@'))
