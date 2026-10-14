@@ -7,7 +7,14 @@ on:
 permissions:
   contents: read
 jobs:
+  changes:
+    permissions:
+      contents: read
+    uses: myon-bioinformatics/myon-bioinformatics/.github/workflows/reusable-change-detection.yml@40bd74c4a36896509b506d6d06251255be6c77c7
+
   resolve-vendor:
+    if: needs.changes.outputs.product_changed == 'true'
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -47,7 +54,8 @@ jobs:
           retention-days: 14
 
   test:
-    needs: resolve-vendor
+    if: needs.changes.outputs.product_changed == 'true'
+    needs: [changes, resolve-vendor]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -116,8 +124,8 @@ jobs:
           retention-days: 14
 
   failure-identity:
-    needs: test
-    if: always()
+    needs: [changes, test]
+    if: (always()) && needs.changes.outputs.product_changed == 'true'
     permissions:
       contents: read
       actions: read
