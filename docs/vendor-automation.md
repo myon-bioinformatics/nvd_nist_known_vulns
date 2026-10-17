@@ -11,7 +11,7 @@ that same snapshot, verifies it offline, then tests it. Upstream changes during
 the matrix cannot select different source commits.
 
 CI uses the shared stdlib tool at
-`b000e5967cb7596f6f9f20fe396a686fdc700c16`. It checks the baseline copies,
+`1eda992aa6fa31a902e2c06428e53ab17e8fe3c1`. It checks the baseline copies,
 restores them from locked commits, and records the resulting snapshot in a
 separate Actions artifact used by that run, including when tests fail. The
 placement tool itself stays at its reviewed full SHA. Automatic upstream
@@ -22,7 +22,7 @@ same commands after checking out the pinned shared tool in `.vendor-sync-tools`:
 
 ```sh
 git clone https://github.com/myon-bioinformatics/myon-bioinformatics.git .vendor-sync-tools
-git -C .vendor-sync-tools checkout b000e5967cb7596f6f9f20fe396a686fdc700c16
+git -C .vendor-sync-tools checkout 1eda992aa6fa31a902e2c06428e53ab17e8fe3c1
 python -S .vendor-sync-tools/vendor_sync.py check --manifest vendor.lock.json
 python -S .vendor-sync-tools/vendor_sync.py materialize --manifest vendor.lock.json
 python -S .vendor-sync-tools/vendor_sync.py check --manifest vendor.lock.json
@@ -49,7 +49,7 @@ policies are unchanged.
 
 Vendor artifact membership is derived exclusively by the parent
 `vendor_stage.py`, checked out with `vendor_sync.py` at full commit
-`b000e5967cb7596f6f9f20fe396a686fdc700c16`. Workflow uploads point to its
+`1eda992aa6fa31a902e2c06428e53ab17e8fe3c1`. Workflow uploads point to its
 generated directory; adding a locked source or LICENSE needs no upload path-list
 edit. Artifact names and repository-relative paths inside each artifact are
 preserved. `vendor-evidence.json` is additional metadata with byte hashes and
