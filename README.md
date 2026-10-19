@@ -7,7 +7,7 @@ NVD’s public CVE REST stem remains `/rest/json/cves/2.0` (a `/cves/3.0` probe 
 
 ## Features
 
-- NVD CVE API 2.0 with exact `cpeName` queries.
+- NVD CVE API 2.0 with exact `cpeName` queries via command-line `--cpe` or `config.ini`.
 - Optional CVSS v3-series filters: `--cvss-v3-severity` / `--cvss-v3-metrics` (NVD `cvssV3Severity` / `cvssV3Metrics`).
 - Local CVSS base-score calculation for v2.0 / v3.0 / v3.1 vector strings (`calculate_cvss_base`); metric records also carry `calculated_base_score` when a vector is present.
 - No third-party runtime dependencies.
@@ -31,6 +31,9 @@ cpe2 = cpe:2.3:a:apache:log4j:1.2:-:*:*:*:*:*:*
 
 ```bash
 python nvd_nist_known_vulns.py
+python nvd_nist_known_vulns.py --cpe "cpe:2.3:a:openssl:openssl:1.1.1c:*:*:*:*:*:*:*"
+# Repeat --cpe for multiple names; a value is never split at commas.
+python nvd_nist_known_vulns.py --cpe "cpe:2.3:a:openssl:openssl:1.1.1c:*:*:*:*:*:*:*" --cpe "cpe:2.3:a:apache:log4j:1.2:-:*:*:*:*:*:*"
 python nvd_nist_known_vulns.py --silent --output result.jsonl
 python nvd_nist_known_vulns.py --config other.ini --timeout 30
 python nvd_nist_known_vulns.py --cvss-v3-severity CRITICAL
@@ -110,3 +113,5 @@ acceptance of extra query keys so an unknown restriction cannot certify an
 unfiltered measurement. Put additive descriptive metadata outside `query`.
 Filtered kinds use the explicit, validated `cpe_name` plus `filters` shape;
 unknown record kinds remain ignored as required by the v1 contract.
+
+When `--cpe` / `--cpe-name` is provided, it replaces the CPE names from `config.ini`. Without either option, an empty `[cpeName]` section is an error.
