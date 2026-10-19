@@ -556,7 +556,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--config", default="config.ini")
     parser.add_argument(
         "--cpe",
-        "--cpe-name",
         action="append",
         dest="cpes",
         help="One CPE 2.3 name to fetch vulnerabilities for. Repeat for multiple names; commas are preserved.",
