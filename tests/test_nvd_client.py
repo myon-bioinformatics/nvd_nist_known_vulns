@@ -347,4 +347,42 @@ class Tests(unittest.TestCase):
             self.assertEqual(nvd.main(["--silent","--config","nonexistent.ini"]),1)
         self.assertIn("error:", stderr.getvalue())
 
+    def test_parse_cpe_name_valid(self):
+        cpe = r"cpe:2.3:a:openssl:openssl\,lib:1.1.1c:*:*:*:*:*:*:*"
+        parsed = nvd.parse_cpe_name(cpe)
+        self.assertEqual(parsed["part"], "a")
+        self.assertEqual(parsed["part_type"], "application")
+        self.assertEqual(parsed["vendor"], "openssl")
+        self.assertEqual(parsed["product"], "openssl,lib")
+        self.assertEqual(parsed["version"], "1.1.1c")
+        self.assertEqual(parsed["update"], "*")
+
+    def test_parse_cpe_name_invalid(self):
+        invalid_cpes = [
+            "cpe:2.2:a:openssl:openssl:1.1.1c",
+            "not_a_cpe",
+            "cpe:2.3:a:openssl",
+            123,
+        ]
+        for invalid in invalid_cpes:
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                nvd.parse_cpe_name(invalid)
+
+    def test_suggest_cpe_names(self):
+        candidates = [
+            "cpe:2.3:a:openssl:openssl:1.1.1c:*:*:*:*:*:*:*",
+            "cpe:2.3:a:openssl:openssl:1.1.1d:*:*:*:*:*:*:*",
+            "cpe:2.3:a:apache:log4j:1.2:-:*:*:*:*:*:*",
+        ]
+        matches = nvd.suggest_cpe_names(
+            "cpe:2.3:a:openssl:openssl:1.1.1a:*:*:*:*:*:*:*",
+            candidates,
+            cutoff=0.8,
+        )
+        self.assertIn("cpe:2.3:a:openssl:openssl:1.1.1c:*:*:*:*:*:*:*", matches)
+        self.assertNotIn("cpe:2.3:a:apache:log4j:1.2:-:*:*:*:*:*:*", matches)
+
+        with self.assertRaises(ValueError):
+            nvd.suggest_cpe_names(None, candidates)
+
 if __name__=="__main__": unittest.main()

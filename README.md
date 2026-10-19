@@ -47,7 +47,54 @@ NVD_API_KEY=... python nvd_nist_known_vulns.py
 
 ## Reuse contract
 
-The module is intentionally kept as one stdlib-only file. Other repositories may import `api_call`, `iter_cve_pages`, `format_cve_data`, `fetch_cves`, `calculate_cvss_base`, `parse_jsonl`, `read_jsonl`, or `select_cpe_records`. The JSONL helpers validate completion evidence, distinguish an unmeasured/incomplete CPE from a measured zero-result CPE, and deduplicate a CVE that matches multiple selected CPEs. Network access is isolated from normalization so consumers can use captured NVD JSON fixtures in tests. `calculate_cvss_base` is pure and offline; it implements FIRST CVSS v2 / v3.0 / v3.1 base equations and rejects v4 MacroVector lookup vectors.
+The module is intentionally kept as one stdlib-only file. Other repositories may import `api_call`, `iter_cve_pages`, `format_cve_data`, `fetch_cves`, `calculate_cvss_base`, `parse_cpe_name`, `suggest_cpe_names`, `parse_jsonl`, `read_jsonl`, or `select_cpe_records`. The JSONL helpers validate completion evidence, distinguish an unmeasured/incomplete CPE from a measured zero-result CPE, and deduplicate a CVE that matches multiple selected CPEs. Network access is isolated from normalization so consumers can use captured NVD JSON fixtures in tests. `calculate_cvss_base` is pure and offline; it implements FIRST CVSS v2 / v3.0 / v3.1 base equations and rejects v4 MacroVector lookup vectors. `parse_cpe_name` parses CPE 2.3 strings into structured component attributes (part, vendor, product, version, etc.) and unescapes formatted values. `suggest_cpe_names` uses stdlib `difflib.get_close_matches` for spelling suggestions only.
+
+### CPE parsing and suggestion contract
+
+`parse_cpe_name(name)` validates the `cpe:2.3:` prefix, all eleven nonempty
+attributes, part/language syntax, permitted quoting and wildcard positions from
+[NISTIR 7695, Figure 6-3](https://doi.org/10.6028/NIST.IR.7695).
+Invalid input raises `ValueError`. URI (`cpe:/`) bindings are not supported by
+this helper. Syntax validation does not establish that a name exists in the
+NVD dictionary or identifies an installed product.
+
+The top-level attribute values are **unescaped display strings**. The additional
+`raw_attributes` dictionary retains the exact field spellings. For example,
+`*` means ANY, `-` means NA, and `\*` is a literal asterisk; the display values
+of ANY and a literal asterisk are both `"*"`, so use the original CPE/raw fields
+to retain that distinction. Unquoted `*` or runs of `?` may occur only at the
+edges of a nonempty value (for example `1.*` or `??widget?`). Escaped colons and
+backslashes remain within their attribute. This display parser is not a WFN
+unbinder or an implementation of CPE Name Matching/applicability rules.
+
+`suggest_cpe_names(target, candidates, n=3, cutoff=0.6)` compares **complete
+original strings**, returning at most `n` unique original candidate strings in
+`difflib.get_close_matches` order. The target must be a valid CPE formatted
+string (not arbitrary free text). Invalid/non-string candidates are skipped;
+`n` must be a positive integer and `cutoff` a number in `[0, 1]`; invalid target
+or parameters raise `ValueError`. Wildcards are text here, not expanded patterns.
+
+**Candidates are not confirmed matches.** Shared prefixes and wildcard fields
+can give different vendors, products, or versions a high similarity. For example,
+these two different vendors have similarity about 0.93 and can both appear at
+`cutoff=0.8`:
+
+```text
+cpe:2.3:a:vendoralpha:widget:1.0:*:*:*:*:*:*:*
+cpe:2.3:a:vendoromega:widget:1.0:*:*:*:*:*:*:*
+```
+
+Similarity is not a confidence/probability score. Even an identical spelling
+does not itself prove vulnerability applicability. Consumers must verify the
+vendor, product, version and other relevant attributes and explicitly select a
+CPE before querying NVD; assess NVD applicability/configuration and version
+constraints separately. Never automatically replace a query with a suggestion
+or transfer another CPE's CVEs/completion evidence based on similarity.
+
+Both helpers are pure/offline and are not called by `api_call`, `fetch_cves`,
+the CLI, JSONL emission/parsing, or `select_cpe_records`. Existing query and JSONL
+behavior stays unchanged: selection still uses explicit CPE strings and matching
+query-completion evidence. No fuzzy results are added to the JSONL schema.
 
 The emitted JSONL schema is versioned as `nvd-cve-summary/1`. Records use `kind: "cve"` or `kind: "query_complete"`. A successful CPE query emits its CVE records first and exactly one `query_complete` record afterward, including when the result count is zero. A completion record is emitted only after pagination has been validated as complete; if it is absent, consumers must treat that CPE as not measured or failed rather than as zero vulnerabilities. Early v1 CVE records without `kind` may be treated as `cve`. V1 consumers must dispatch on `kind` and ignore unknown kinds so future additive record kinds do not break them. Additive fields and record kinds following that rule may be introduced within v1; other incompatible shape changes require a new schema version. NVD `published` and `lastModified` timestamps are UTC values as supplied by NVD. CVSS selection prefers a `Primary` metric and records its `source` and `type`. When a metric includes a calculable vector, the record also adds `calculated_base_score` and `calculated_base_severity` beside the NVD-supplied score.
 
