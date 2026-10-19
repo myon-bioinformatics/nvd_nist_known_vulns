@@ -328,7 +328,7 @@ class Tests(unittest.TestCase):
 
     def test_cli_cpe_multiple_and_deduplication(self):
         with mock.patch.object(nvd,"fetch_cves",return_value=[]) as fetch, mock.patch("sys.stdout", io.StringIO()):
-            self.assertEqual(nvd.main(["--silent","--cpe-name","cpe:1","--cpe","cpe:2","--cpe","cpe:3","--cpe","cpe:1"]),0)
+            self.assertEqual(nvd.main(["--silent","--cpe","cpe:1","--cpe","cpe:2","--cpe","cpe:3","--cpe","cpe:1"]),0)
         self.assertEqual([call.args[0] for call in fetch.call_args_list],["cpe:1","cpe:2","cpe:3"])
 
     def test_cli_cpe_preserves_escaped_comma(self):
@@ -336,6 +336,10 @@ class Tests(unittest.TestCase):
         with mock.patch.object(nvd,"fetch_cves",return_value=[]) as fetch, mock.patch("sys.stdout", io.StringIO()):
             self.assertEqual(nvd.main(["--silent","--cpe",cpe]),0)
         self.assertEqual([call.args[0] for call in fetch.call_args_list],[cpe])
+
+    def test_cpe_name_alias_removed(self):
+        with mock.patch("sys.stderr",io.StringIO()), self.assertRaises(SystemExit):
+            nvd.main(["--silent","--cpe-name","cpe:1"])
 
     def test_cli_no_cpe_or_config_error(self):
         stderr=io.StringIO()

@@ -114,4 +114,4 @@ unfiltered measurement. Put additive descriptive metadata outside `query`.
 Filtered kinds use the explicit, validated `cpe_name` plus `filters` shape;
 unknown record kinds remain ignored as required by the v1 contract.
 
-When `--cpe` / `--cpe-name` is provided, it replaces the CPE names from `config.ini`. Without either option, an empty `[cpeName]` section is an error.
+When `--cpe` is provided, it replaces the CPE names from `config.ini`. Without it, an empty `[cpeName]` section is an error.
