@@ -9,13 +9,14 @@ from __future__ import annotations
 import argparse
 import configparser
 from datetime import datetime, timezone
-import difflib
 from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
+import difflib
 from email.utils import parsedate_to_datetime
 from http.client import HTTPException, IncompleteRead
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import tempfile
 import time
@@ -543,6 +544,8 @@ def _split_cpe_components(cpe_str: str) -> list[str]:
             current = []
         else:
             current.append(char)
+    if escaped:
+        raise ValueError("Invalid CPE 2.3 name: trailing escape")
     parts.append("".join(current))
     return parts
 
@@ -563,12 +566,23 @@ def _unescape_cpe_value(value: str) -> str:
     return "".join(res)
 
 
-def parse_cpe_name(cpe_name: str) -> dict[str, Any]:
-    """Parse a CPE 2.3 formatted string into structured attributes.
+# NISTIR 7695 Figure 6-3: wildcards occur only at the edges; quoted
+# punctuation is data, including an escaped colon, backslash, '*' or '?'.
+_CPE_QUOTABLE = "\\*?!\"#$%&'()+,/:;<=>@[]^`{|}~"
+_CPE_AVSTRING = re.compile(
+    r"(?:\*|\?+)?(?:[A-Za-z0-9_.-]|\\[" + re.escape(_CPE_QUOTABLE)
+    + r"])+(?:\*|\?+)?|[*-]"
+)
 
-    Returns a dictionary containing raw and unescaped CPE attributes:
-    ``part``, ``part_type``, ``vendor``, ``product``, ``version``, ``update``,
-    ``edition``, ``language``, ``sw_edition``, ``target_sw``, ``target_hw``, ``other``.
+
+def parse_cpe_name(cpe_name: str) -> dict[str, Any]:
+    """Validate CPE 2.3 formatted-string syntax and expose display attributes.
+
+    Attribute strings are unescaped for display, NOT for identity comparison.
+    ``raw_attributes`` preserves every original field: e.g. ``*`` (ANY), ``-``
+    (NA), and ``\\*`` (literal asterisk) remain distinguishable there. This is
+    neither a WFN unbinder nor a CPE applicability/matching implementation.
+    Invalid input raises ValueError; no CPE dictionary/network lookup is made.
     """
     if not isinstance(cpe_name, str) or not cpe_name.startswith("cpe:2.3:"):
         raise ValueError("Invalid CPE 2.3 name: must start with 'cpe:2.3:'")
@@ -577,33 +591,57 @@ def parse_cpe_name(cpe_name: str) -> dict[str, Any]:
         raise ValueError(
             f"Invalid CPE 2.3 format: expected 11 attributes after 'cpe:2.3:', got {len(parts) - 2}"
         )
-    raw_attrs = parts[2:]
     keys = (
-        "part",
-        "vendor",
-        "product",
-        "version",
-        "update",
-        "edition",
-        "language",
-        "sw_edition",
-        "target_sw",
-        "target_hw",
-        "other",
+        "part", "vendor", "product", "version", "update", "edition",
+        "language", "sw_edition", "target_sw", "target_hw", "other",
     )
-    result = {key: _unescape_cpe_value(val) for key, val in zip(keys, raw_attrs)}
+    raw = dict(zip(keys, parts[2:]))
+    for key, value in raw.items():
+        if key == "part":
+            valid = value.lower() in ("a", "o", "h", "*", "-")
+        elif key == "language":
+            valid = value in ("*", "-") or re.fullmatch(
+                r"[A-Za-z]{2,3}(?:-(?:[A-Za-z]{2}|[0-9]{3}))?", value
+            ) is not None
+        else:
+            valid = _CPE_AVSTRING.fullmatch(value) is not None
+        if not valid:
+            raise ValueError(f"Invalid CPE 2.3 {key}: {value!r}")
+    result: dict[str, Any] = {key: _unescape_cpe_value(val) for key, val in raw.items()}
     part_types = {"a": "application", "o": "operating_system", "h": "hardware"}
-    result["part_type"] = part_types.get(result["part"], "unknown")
+    result["part_type"] = part_types.get(result["part"].lower(), "unknown")
+    result["raw_attributes"] = raw
     return result
 
 
 def suggest_cpe_names(
     target: str, candidates: Iterable[str], *, n: int = 3, cutoff: float = 0.6
 ) -> list[str]:
-    """Return fuzzy matches for a target string from candidates using difflib.get_close_matches."""
-    if not isinstance(target, str):
-        raise ValueError("target must be a string")
-    cand_list = [c for c in candidates if isinstance(c, str)]
+    """Return at most n unique, syntactically valid CPE spelling suggestions.
+
+    Uses difflib.get_close_matches on the complete original strings. Different
+    vendors, products, versions, or wildcard scopes may rank highly. A score
+    is textual similarity, NOT confidence, identity, or vulnerability evidence.
+    Callers must verify candidates and explicitly choose an exact CPE before
+    querying NVD. No automatic replacement, CVE lookup or JSONL mutation occurs.
+    Wildcards are compared as text, never expanded. Invalid targets/parameters
+    raise ValueError; malformed/non-string candidates are skipped.
+    """
+    parse_cpe_name(target)
+    if isinstance(n, bool) or not isinstance(n, int) or n <= 0:
+        raise ValueError("n must be a positive integer")
+    if isinstance(cutoff, bool) or not isinstance(cutoff, (int, float)) or not 0 <= cutoff <= 1:
+        raise ValueError("cutoff must be a number between 0 and 1")
+    cand_list = []
+    seen = set()
+    for candidate in candidates:
+        try:
+            parse_cpe_name(candidate)
+        except ValueError:
+            continue
+        if candidate not in seen:
+            seen.add(candidate)
+            cand_list.append(candidate)
     return difflib.get_close_matches(target, cand_list, n=n, cutoff=cutoff)
 
 

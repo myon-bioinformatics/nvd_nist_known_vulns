@@ -8,3 +8,11 @@ __pycache__/
 .coverage
 htmlcov/
 .venv/
+
+# --- common ignores (shared) ---
+.coverage.*
+venv/
+node_modules/
+.DS_Store
+Thumbs.db
+# --- end common ignores ---
