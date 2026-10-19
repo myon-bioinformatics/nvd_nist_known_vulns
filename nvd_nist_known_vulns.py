@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import configparser
 from datetime import datetime, timezone
+import difflib
 from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
 from email.utils import parsedate_to_datetime
 from http.client import HTTPException, IncompleteRead
@@ -524,6 +525,86 @@ def select_cpe_records(
     })
     return {"status": "measured", "cpe_names": cpes,
             "cve_count": len(cve_ids), "cve_ids": cve_ids}
+
+
+def _split_cpe_components(cpe_str: str) -> list[str]:
+    parts = []
+    current: list[str] = []
+    escaped = False
+    for char in cpe_str:
+        if escaped:
+            current.append(char)
+            escaped = False
+        elif char == "\\":
+            current.append(char)
+            escaped = True
+        elif char == ":":
+            parts.append("".join(current))
+            current = []
+        else:
+            current.append(char)
+    parts.append("".join(current))
+    return parts
+
+
+def _unescape_cpe_value(value: str) -> str:
+    res: list[str] = []
+    escaped = False
+    for char in value:
+        if escaped:
+            res.append(char)
+            escaped = False
+        elif char == "\\":
+            escaped = True
+        else:
+            res.append(char)
+    if escaped:
+        res.append("\\")
+    return "".join(res)
+
+
+def parse_cpe_name(cpe_name: str) -> dict[str, Any]:
+    """Parse a CPE 2.3 formatted string into structured attributes.
+
+    Returns a dictionary containing raw and unescaped CPE attributes:
+    ``part``, ``part_type``, ``vendor``, ``product``, ``version``, ``update``,
+    ``edition``, ``language``, ``sw_edition``, ``target_sw``, ``target_hw``, ``other``.
+    """
+    if not isinstance(cpe_name, str) or not cpe_name.startswith("cpe:2.3:"):
+        raise ValueError("Invalid CPE 2.3 name: must start with 'cpe:2.3:'")
+    parts = _split_cpe_components(cpe_name)
+    if len(parts) != 13 or parts[0] != "cpe" or parts[1] != "2.3":
+        raise ValueError(
+            f"Invalid CPE 2.3 format: expected 11 attributes after 'cpe:2.3:', got {len(parts) - 2}"
+        )
+    raw_attrs = parts[2:]
+    keys = (
+        "part",
+        "vendor",
+        "product",
+        "version",
+        "update",
+        "edition",
+        "language",
+        "sw_edition",
+        "target_sw",
+        "target_hw",
+        "other",
+    )
+    result = {key: _unescape_cpe_value(val) for key, val in zip(keys, raw_attrs)}
+    part_types = {"a": "application", "o": "operating_system", "h": "hardware"}
+    result["part_type"] = part_types.get(result["part"], "unknown")
+    return result
+
+
+def suggest_cpe_names(
+    target: str, candidates: Iterable[str], *, n: int = 3, cutoff: float = 0.6
+) -> list[str]:
+    """Return fuzzy matches for a target string from candidates using difflib.get_close_matches."""
+    if not isinstance(target, str):
+        raise ValueError("target must be a string")
+    cand_list = [c for c in candidates if isinstance(c, str)]
+    return difflib.get_close_matches(target, cand_list, n=n, cutoff=cutoff)
 
 
 def read_ini(path: str = "config.ini") -> list[str]:
