@@ -554,6 +554,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Fetch known CVEs from NVD by CPE.")
     parser.add_argument("--silent", action="store_true")
     parser.add_argument("--config", default="config.ini")
+    parser.add_argument(
+        "--cpe",
+        "--cpe-name",
+        action="append",
+        dest="cpes",
+        help="CPE 2.3 name(s) to fetch vulnerabilities for. Can be specified multiple times.",
+    )
     parser.add_argument("--output")
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument(
@@ -572,7 +579,18 @@ def main(argv: list[str] | None = None) -> int:
         scope = _query("scope", args.cvss_v3_severity, args.cvss_v3_metrics).get("filters", {})
         severity = scope.get("cvss_v3_severity")
         metrics = scope.get("cvss_v3_metrics")
-        cpes = read_ini(args.config)
+        if args.cpes:
+            cpes = []
+            for entry in args.cpes:
+                if entry:
+                    for item in entry.split(","):
+                        item_clean = item.strip()
+                        if item_clean and item_clean not in cpes:
+                            cpes.append(item_clean)
+        else:
+            cpes = read_ini(args.config)
+        if not cpes:
+            raise ValueError("No CPE names specified")
         if args.output:
             target = Path(args.output)
             handle = tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=target.parent, prefix=target.name + ".", suffix=".tmp", delete=False)

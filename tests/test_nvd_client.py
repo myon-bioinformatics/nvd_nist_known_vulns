@@ -316,4 +316,25 @@ class Tests(unittest.TestCase):
     def test_retry_after_is_capped_at_sixty_seconds(self):
         self.assertEqual(nvd._retry_delay("3600",0),60.0)
 
+    def test_cli_cpe_options(self):
+        record={"id":"CVE-T","description":"test","cwe":[],"cvss_v4":None,"cvss_v3":None,"cvss_v2":None,"published":None,"last_modified":None,"source_identifier":None}
+        with tempfile.TemporaryDirectory() as d:
+            out=Path(d)/"out.jsonl"
+            with mock.patch.object(nvd,"fetch_cves",return_value=[record]) as fetch:
+                self.assertEqual(nvd.main(["--silent","--cpe","cpe:2.3:a:test:one:1:*:*:*:*:*:*:*","--output",str(out)]),0)
+            self.assertEqual(fetch.call_args_list[0].args[0],"cpe:2.3:a:test:one:1:*:*:*:*:*:*:*")
+            lines=[json.loads(line) for line in out.read_text(encoding="utf-8").split("\n") if line]
+            self.assertEqual(lines[0]["query"]["cpe_name"],"cpe:2.3:a:test:one:1:*:*:*:*:*:*:*")
+
+    def test_cli_cpe_multiple_and_comma(self):
+        with mock.patch.object(nvd,"fetch_cves",return_value=[]) as fetch, mock.patch("sys.stdout", io.StringIO()):
+            self.assertEqual(nvd.main(["--silent","--cpe-name","cpe:1,cpe:2","--cpe","cpe:3"]),0)
+        self.assertEqual([call.args[0] for call in fetch.call_args_list],["cpe:1","cpe:2","cpe:3"])
+
+    def test_cli_no_cpe_or_config_error(self):
+        stderr=io.StringIO()
+        with mock.patch("sys.stderr",stderr):
+            self.assertEqual(nvd.main(["--silent","--config","nonexistent.ini"]),1)
+        self.assertIn("error:", stderr.getvalue())
+
 if __name__=="__main__": unittest.main()
