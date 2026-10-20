@@ -179,5 +179,9 @@ python -S -m unittest discover -s tests -p test_nvd_client.py -v
 `pyproject.toml` is the canonical development dependency definition; legacy
 requirements files remain for downstream callers. Runtime metadata does not
 raise the source/vendoring floor to the development floor. CI pins setup-python
-v7.0.0 and setup-uv v10.3.0 by full commit SHA, and uses uv 0.13.1. Setup actions
+v7.0.0 and setup-uv v10.3.0 by full commit SHA, and uses uv 0.13.3. Setup actions
 using Node 24 require runner 2.327.1 or newer (GitHub-hosted runners are used).
+
+CI also exercises the stdlib runtime floor and Python 3.14 on Windows and macOS.
+Dependency-bearing portability tests use locked uv environments on Python 3.11+;
+raw JUnit reports from both operating systems are required by the identity collector.

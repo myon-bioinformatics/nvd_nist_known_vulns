@@ -18,14 +18,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
       - name: Check out the pinned vendor placement tool
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: myon-bioinformatics/myon-bioinformatics
           ref: 1eda992aa6fa31a902e2c06428e53ab17e8fe3c1
@@ -46,7 +46,7 @@ jobs:
           --manifest vendor.lock.json --kind locked --output build/vendor-evidence-candidate
       - name: Preserve resolved vendor snapshot
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: vendor-snapshot
           path: build/vendor-evidence-candidate
@@ -62,21 +62,21 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
       - name: Check out the pinned vendor placement tool
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: myon-bioinformatics/myon-bioinformatics
           ref: 1eda992aa6fa31a902e2c06428e53ab17e8fe3c1
           path: .vendor-sync-tools
           persist-credentials: false
       - name: Download resolved vendor snapshot
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: vendor-snapshot
           path: .
@@ -90,21 +90,17 @@ jobs:
       - name: Install test-only dependencies
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
-          version: "0.13.1"
+          version: "0.13.3"
       - name: Sync locked development environment
         shell: bash
         run: |
           uv sync --locked --python "$(python -c 'import sys; print(sys.executable)')"
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            echo "$PWD/.venv/Scripts" >> "$GITHUB_PATH"
-          else
-            echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
-          fi
+          python -c "import os; from pathlib import Path; print(Path('.venv').resolve() / ('Scripts' if os.name == 'nt' else 'bin'))" >> "$GITHUB_PATH"
       - name: Record native pytest outcomes and JUnit
         run: python -m pytest tests -p vendor.xprobe_pytest --xprobe-jsonl=reports/pytest-events.jsonl --xprobe-repository=myon-bioinformatics/nvd_nist_known_vulns --junitxml=reports/pytest-${{ matrix.python-version }}.xml
       - name: Preserve native observations
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pytest-events-py${{ matrix.python-version }}
           path: reports/pytest-events.jsonl
@@ -112,7 +108,7 @@ jobs:
           retention-days: 14
       - name: Preserve raw JUnit
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: junit-py${{ matrix.python-version }}
           path: reports/pytest-${{ matrix.python-version }}.xml
@@ -127,7 +123,7 @@ jobs:
           --manifest vendor.lock.json --kind locked --output build/vendor-evidence-test
       - name: Preserve vendor lock used by this run
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: vendor-lock-py${{ matrix.python-version }}
           path: build/vendor-evidence-test
