@@ -1,0 +1,16 @@
+[project]
+name = "nvd-nist-known-vulns-dev"
+version = "0.0.0"
+requires-python = ">=3.9"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8", "PyYAML>=6"]
+
+# Vendored/source runtime has no dependencies. uv manages contributor tools only.
+[tool.uv]
+package = false
+environments = ["python_version >= '3.11'"]
+
+[tool.uv.dependency-groups]
+dev = { requires-python = ">=3.11" }
