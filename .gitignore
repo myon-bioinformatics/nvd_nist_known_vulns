@@ -1,1 +1,8 @@
 .vendor-sync-tools/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+reports/
+*.tmp

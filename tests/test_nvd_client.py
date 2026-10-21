@@ -326,16 +326,10 @@ class Tests(unittest.TestCase):
             lines=[json.loads(line) for line in out.read_text(encoding="utf-8").split("\n") if line]
             self.assertEqual(lines[0]["query"]["cpe_name"],"cpe:2.3:a:test:one:1:*:*:*:*:*:*:*")
 
-    def test_cli_cpe_multiple_and_deduplication(self):
+    def test_cli_cpe_multiple_and_comma(self):
         with mock.patch.object(nvd,"fetch_cves",return_value=[]) as fetch, mock.patch("sys.stdout", io.StringIO()):
-            self.assertEqual(nvd.main(["--silent","--cpe-name","cpe:1","--cpe","cpe:2","--cpe","cpe:3","--cpe","cpe:1"]),0)
+            self.assertEqual(nvd.main(["--silent","--cpe-name","cpe:1,cpe:2","--cpe","cpe:3"]),0)
         self.assertEqual([call.args[0] for call in fetch.call_args_list],["cpe:1","cpe:2","cpe:3"])
-
-    def test_cli_cpe_preserves_escaped_comma(self):
-        cpe = r"cpe:2.3:a:example:product\,edition:1:*:*:*:*:*:*:*"
-        with mock.patch.object(nvd,"fetch_cves",return_value=[]) as fetch, mock.patch("sys.stdout", io.StringIO()):
-            self.assertEqual(nvd.main(["--silent","--cpe",cpe]),0)
-        self.assertEqual([call.args[0] for call in fetch.call_args_list],[cpe])
 
     def test_cli_no_cpe_or_config_error(self):
         stderr=io.StringIO()

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Dependency-free NVD CVE API 2.0 client with local CVSS score calculation.
 
 Network requests are globally throttled per process; concurrent callers are not synchronized.
@@ -559,7 +560,7 @@ def main(argv: list[str] | None = None) -> int:
         "--cpe-name",
         action="append",
         dest="cpes",
-        help="One CPE 2.3 name to fetch vulnerabilities for. Repeat for multiple names; commas are preserved.",
+        help="CPE 2.3 name(s) to fetch vulnerabilities for. Can be specified multiple times.",
     )
     parser.add_argument("--output")
     parser.add_argument("--timeout", type=float, default=30.0)
@@ -582,9 +583,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.cpes:
             cpes = []
             for entry in args.cpes:
-                item_clean = entry.strip()
-                if item_clean and item_clean not in cpes:
-                    cpes.append(item_clean)
+                if entry:
+                    for item in entry.split(","):
+                        item_clean = item.strip()
+                        if item_clean and item_clean not in cpes:
+                            cpes.append(item_clean)
         else:
             cpes = read_ini(args.config)
         if not cpes:
