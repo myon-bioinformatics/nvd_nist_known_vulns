@@ -11,6 +11,12 @@ NVD’s public CVE REST stem remains `/rest/json/cves/2.0` (a `/cves/3.0` probe 
 
 CPE 2.3 inputs are queried through the NVD CVE API 2.0 and normalized into JSONL. Requests are throttled to 6 seconds without an API key or 0.6 seconds with one. Optional CVSS filters and atomic file output are described below.
 
+### Challenges, roles, and outcomes
+
+![Challenges, roles, and outcomes for CPE-based NVD queries, CVSS handling, and JSONL results.](docs/images/nvd_nist_known_vulns-concept-v2.png)
+
+Complementary view of CPE input, NVD/CVSS processing, and JSONL output. CVE results still require an applicability review; the client does not scan installed products or certify that a system is secure.
+
 ## Features
 
 - NVD CVE API 2.0 with exact `cpeName` queries via command-line `--cpe` or `config.ini`.
