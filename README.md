@@ -3,7 +3,19 @@
 **Python compatibility:** CI-tested on Python 3.9–3.14.
 Single-file, Python-standard-library client for the NVD CVE API 2.0. It fetches vulnerabilities for CPE 2.3 names and emits deterministic JSON Lines suitable for CLI use, CI, offline processing, and cross-repository adapters.
 
-NVD’s public CVE REST stem remains `/rest/json/cves/2.0` (a `/cves/3.0` probe returns 404). This client stays on 2.0 and adds CVSS v3-series request filters plus local CVSS base-score calculation for v2 / v3.0 / v3.1 vectors.
+NVD’s public CVE REST path remains `/rest/json/cves/2.0` (a `/cves/3.0` probe returns 404). This client stays on 2.0 and adds CVSS v3-series request filters plus local CVSS base-score calculation for v2 / v3.0 / v3.1 vectors.
+
+## Concept overview
+
+![CPE inputs pass through NVD CVE API queries and CVSS processing to JSONL output, with offline tests and CI evidence.](docs/images/nvd_nist_known_vulns-concept.png)
+
+CPE 2.3 inputs are queried through the NVD CVE API 2.0 and normalized into JSONL. Requests are throttled to 6 seconds without an API key or 0.6 seconds with one. Optional CVSS filters and atomic file output are described below.
+
+### Challenges, roles, and outcomes
+
+![Challenges, roles, and outcomes for CPE-based NVD queries, CVSS handling, and JSONL results.](docs/images/nvd_nist_known_vulns-concept-v2.png)
+
+Complementary view of CPE input, NVD/CVSS processing, and JSONL output. CVE results still require an applicability review; the client does not scan installed products or certify that a system is secure.
 
 ## Features
 
@@ -109,6 +121,10 @@ python -S -m unittest discover -s tests -v
 
 Tests are offline and do not consume NVD rate limits.
 
+Install test-only tools with `python -m pip install -r tests/requirements.txt`.
+CI preserves native pytest JSONL and JUnit while retaining the `python -S`
+runtime isolation lane. See [recording and exploration](docs/pytest-observations.md).
+
 ## Migration note
 
 The original implementation used `requests` and printed Python `set` values. This revision removes that dependency and changes the machine-readable output to deterministic JSONL. The `config.ini` CPE input and `--silent` option remain supported.
@@ -125,13 +141,6 @@ This product uses data from the NVD API but is not endorsed or certified by the 
 ## License
 
 MIT
-
-## Test evidence
-
-Install test-only tools with `python -m pip install -r tests/requirements.txt`.
-CI preserves native pytest JSONL and JUnit while retaining the `python -S`
-runtime isolation lane. See [recording and exploration](docs/pytest-observations.md).
-
 
 ### Filtered query completion
 
@@ -176,8 +185,9 @@ uv run --locked python -m pytest
 python -S -m unittest discover -s tests -p test_nvd_client.py -v
 ```
 
-`pyproject.toml` is the canonical development dependency definition; legacy
-requirements files remain for downstream callers. Runtime metadata does not
+`pyproject.toml` is the canonical development dependency definition. The runtime
+has no third-party dependencies, and `tests/requirements.txt` lists only the
+test-only tools. Runtime metadata does not
 raise the source/vendoring floor to the development floor. CI pins setup-python
 v7.0.0 and setup-uv v10.3.0 by full commit SHA, and uses uv 0.13.3. Setup actions
 using Node 24 require runner 2.327.1 or newer (GitHub-hosted runners are used).
