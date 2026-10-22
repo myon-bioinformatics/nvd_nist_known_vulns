@@ -5,6 +5,12 @@ Single-file, Python-standard-library client for the NVD CVE API 2.0. It fetches 
 
 NVD’s public CVE REST stem remains `/rest/json/cves/2.0` (a `/cves/3.0` probe returns 404). This client stays on 2.0 and adds CVSS v3-series request filters plus local CVSS base-score calculation for v2 / v3.0 / v3.1 vectors.
 
+## Concept overview
+
+![CPE inputs pass through NVD CVE API queries and CVSS processing to JSONL output, with offline tests and CI evidence.](docs/images/nvd_nist_known_vulns-concept.png)
+
+CPE 2.3 inputs are queried through the NVD CVE API 2.0 and normalized into JSONL. Requests are throttled to 6 seconds without an API key or 0.6 seconds with one. Optional CVSS filters and atomic file output are described below.
+
 ## Features
 
 - NVD CVE API 2.0 with exact `cpeName` queries via command-line `--cpe` or `config.ini`.
