@@ -3,7 +3,7 @@
 **Python compatibility:** CI-tested on Python 3.9–3.14.
 Single-file, Python-standard-library client for the NVD CVE API 2.0. It fetches vulnerabilities for CPE 2.3 names and emits deterministic JSON Lines suitable for CLI use, CI, offline processing, and cross-repository adapters.
 
-NVD’s public CVE REST stem remains `/rest/json/cves/2.0` (a `/cves/3.0` probe returns 404). This client stays on 2.0 and adds CVSS v3-series request filters plus local CVSS base-score calculation for v2 / v3.0 / v3.1 vectors.
+NVD’s public CVE REST path remains `/rest/json/cves/2.0` (a `/cves/3.0` probe returns 404). This client stays on 2.0 and adds CVSS v3-series request filters plus local CVSS base-score calculation for v2 / v3.0 / v3.1 vectors.
 
 ## Concept overview
 
@@ -121,6 +121,10 @@ python -S -m unittest discover -s tests -v
 
 Tests are offline and do not consume NVD rate limits.
 
+Install test-only tools with `python -m pip install -r tests/requirements.txt`.
+CI preserves native pytest JSONL and JUnit while retaining the `python -S`
+runtime isolation lane. See [recording and exploration](docs/pytest-observations.md).
+
 ## Migration note
 
 The original implementation used `requests` and printed Python `set` values. This revision removes that dependency and changes the machine-readable output to deterministic JSONL. The `config.ini` CPE input and `--silent` option remain supported.
@@ -137,13 +141,6 @@ This product uses data from the NVD API but is not endorsed or certified by the 
 ## License
 
 MIT
-
-## Test evidence
-
-Install test-only tools with `python -m pip install -r tests/requirements.txt`.
-CI preserves native pytest JSONL and JUnit while retaining the `python -S`
-runtime isolation lane. See [recording and exploration](docs/pytest-observations.md).
-
 
 ### Filtered query completion
 
