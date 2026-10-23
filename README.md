@@ -149,8 +149,12 @@ python -S -m unittest discover -s tests -v
 Tests are offline and do not consume NVD rate limits.
 
 Install test-only tools with `python -m pip install -r tests/requirements.txt`.
-CI preserves native pytest JSONL and JUnit while retaining the `python -S`
-runtime isolation lane. See [recording and exploration](docs/pytest-observations.md).
+The locked pytest lane runs with `uv run --locked pytest`. Pytest's
+`pythonpath` includes the repository root so that entry point can import this
+flat module. The `python -S` unittest runtime lane stays free of pytest and
+other third-party packages.
+CI preserves native pytest JSONL and JUnit from that locked lane. See
+[recording and exploration](docs/pytest-observations.md).
 
 ## Migration note
 
@@ -208,7 +212,7 @@ package. Development/test environments use Python 3.11+ and a committed uv lock:
 
 ```sh
 uv sync --locked --python 3.11
-uv run --locked python -m pytest
+uv run --locked pytest
 python -S -m unittest discover -s tests -p test_nvd_client.py -v
 ```
 
