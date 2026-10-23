@@ -1,0 +1,27 @@
+{
+  "source": "User-supplied project artwork sheet, 2026-10-23",
+  "source_dimensions": [
+    1536,
+    1024
+  ],
+  "coordinate_convention": "left, top, right-exclusive, bottom-exclusive",
+  "project": {
+    "label": "nvd_nist_known_vulns",
+    "icon": [
+      639,
+      350,
+      808,
+      519
+    ],
+    "favicon": [
+      820,
+      437,
+      887,
+      504
+    ],
+    "icon_sha256": "878ce395eb256ab8049f98456878f6b7af8cb51bab266ece520d561ad0f33ea1",
+    "icon_rgb_sha256": "bf0fc880374ce050018d54cb50dbccac9992254f45ec53da7357efca05f0d081",
+    "favicon_sha256": "56a0307d237bcfeee8733297f30d93827d05cf6f005a67512fcebe61701293f8",
+    "favicon_rgb_sha256": "1cb6a4368bcbf871fb482fcd82afff2f37f32d382dde71300798b765d8ad200b"
+  }
+}
