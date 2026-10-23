@@ -1,5 +1,11 @@
 # NVD NIST known vulnerabilities
 
+<p align="center">
+  <img src="docs/brand/icon.png" alt="nvd_nist_known_vulns icon" width="160" />
+</p>
+
+[Icon](docs/brand/icon.png) · [Favicon](docs/brand/favicon.png)
+
 **Python compatibility:** CI-tested on Python 3.9–3.14.
 Single-file, Python-standard-library client for the NVD CVE API 2.0. It fetches vulnerabilities for CPE 2.3 names and emits deterministic JSON Lines suitable for CLI use, CI, offline processing, and cross-repository adapters.
 
