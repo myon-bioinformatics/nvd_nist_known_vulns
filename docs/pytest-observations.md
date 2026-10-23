@@ -6,7 +6,7 @@ and preserves it with the JUnit report, including when tests fail. All Python ma
 For local runs, choose a fresh destination (existing evidence is never overwritten):
 
 ```sh
-python -m pytest -p vendor.xprobe_pytest --xprobe-jsonl=reports/local-001.jsonl --xprobe-repository=myon-bioinformatics/nvd_nist_known_vulns
+uv run --locked pytest -p vendor.xprobe_pytest --xprobe-jsonl=reports/local-001.jsonl --xprobe-repository=myon-bioinformatics/nvd_nist_known_vulns
 ```
 
 The vendored adapter is byte-for-byte from xprobe commit

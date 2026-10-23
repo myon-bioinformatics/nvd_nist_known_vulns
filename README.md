@@ -31,7 +31,7 @@ Complementary view of CPE input, NVD/CVSS processing, and JSONL output. CVE resu
 - No third-party runtime dependencies.
 - Pagination: results are not silently truncated to one page.
 - Optional `NVD_API_KEY` header support.
-- Rate-limit throttling, bounded retry/backoff for transient HTTP failures, and non-zero CLI failure status.
+- Rate-limit throttling, bounded retry/backoff for transient HTTP failures, and distinct CLI exit codes (0 success, 1 NVD or output failure, 2 usage or local input).
 - Stable `nvd-cve-summary/1` JSONL records with CVSS v4/v3/v2, CWE, dates, and source identifier.
 - Offline unit tests that run with `python -S`.
 
@@ -55,7 +55,28 @@ python nvd_nist_known_vulns.py --cpe "cpe:2.3:a:openssl:openssl:1.1.1c:*:*:*:*:*
 python nvd_nist_known_vulns.py --silent --output result.jsonl
 python nvd_nist_known_vulns.py --config other.ini --timeout 30
 python nvd_nist_known_vulns.py --cvss-v3-severity CRITICAL
+python nvd_nist_known_vulns.py --help
 ```
+
+`--help` documents every flag: `--silent`, `--config`, `--cpe`, `--output`, `--timeout`, `--format`, `--cvss-v3-severity`, and `--cvss-v3-metrics`.
+
+## CLI exit codes
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Success, including a CPE query that returns zero CVEs |
+| 1 | The NVD request failed, or `--output` could not be published |
+| 2 | Usage or local input error (flags, config file, or CPE list) |
+
+`--format text` (the default) writes `error: ...` on stderr for input and runtime failures. Flag mistakes also include the usual usage summary and exit 2.
+
+`--format json` writes one single-line `nvd-cli-error/1` object on stderr and omits progress lines, so a failure is one JSON value:
+
+```json
+{"category":"usage","error":"FileNotFoundError","exit_code":2,"message":"missing.ini","schema":"nvd-cli-error/1","status":"error"}
+```
+
+`category` is `usage` or `runtime`. `error` is an exception class name, or `usage` when flag parsing fails. `exit_code` matches the process status. Success output stays `nvd-cve-summary/1` JSONL on stdout or `--output` for both formats. Existing flags keep their previous names and defaults.
 
 An NVD API key is optional. When supplied it is read from the environment and sent as an HTTP header, not placed in the URL:
 
@@ -128,8 +149,12 @@ python -S -m unittest discover -s tests -v
 Tests are offline and do not consume NVD rate limits.
 
 Install test-only tools with `python -m pip install -r tests/requirements.txt`.
-CI preserves native pytest JSONL and JUnit while retaining the `python -S`
-runtime isolation lane. See [recording and exploration](docs/pytest-observations.md).
+The locked pytest lane runs with `uv run --locked pytest`. Pytest's
+`pythonpath` includes the repository root so that entry point can import this
+flat module. The `python -S` unittest runtime lane stays free of pytest and
+other third-party packages.
+CI preserves native pytest JSONL and JUnit from that locked lane. See
+[recording and exploration](docs/pytest-observations.md).
 
 ## Migration note
 
@@ -176,7 +201,7 @@ unfiltered measurement. Put additive descriptive metadata outside `query`.
 Filtered kinds use the explicit, validated `cpe_name` plus `filters` shape;
 unknown record kinds remain ignored as required by the v1 contract.
 
-When `--cpe` is provided, it replaces the CPE names from `config.ini`. Without it, an empty `[cpeName]` section is an error.
+When `--cpe` is provided, it replaces the CPE names from `config.ini`. Without it, a missing file, an invalid INI document, or an empty `[cpeName]` section is a local input error and the process exits 2.
 
 ## Runtime and development Python policy
 
@@ -187,7 +212,7 @@ package. Development/test environments use Python 3.11+ and a committed uv lock:
 
 ```sh
 uv sync --locked --python 3.11
-uv run --locked python -m pytest
+uv run --locked pytest
 python -S -m unittest discover -s tests -p test_nvd_client.py -v
 ```
 

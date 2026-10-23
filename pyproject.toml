@@ -14,3 +14,6 @@ environments = ["python_version >= '3.11'"]
 
 [tool.uv.dependency-groups]
 dev = { requires-python = ">=3.11" }
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

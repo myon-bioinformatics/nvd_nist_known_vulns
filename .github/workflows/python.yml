@@ -93,11 +93,9 @@ jobs:
           version: "0.13.3"
       - name: Sync locked development environment
         shell: bash
-        run: |
-          uv sync --locked --python "$(python -c 'import sys; print(sys.executable)')"
-          python -c "import os; from pathlib import Path; print(Path('.venv').resolve() / ('Scripts' if os.name == 'nt' else 'bin'))" >> "$GITHUB_PATH"
+        run: uv sync --locked --python "$(python -c 'import sys; print(sys.executable)')"
       - name: Record native pytest outcomes and JUnit
-        run: python -m pytest tests -p vendor.xprobe_pytest --xprobe-jsonl=reports/pytest-events.jsonl --xprobe-repository=myon-bioinformatics/nvd_nist_known_vulns --junitxml=reports/pytest-${{ matrix.python-version }}.xml
+        run: uv run --locked pytest tests -p vendor.xprobe_pytest --xprobe-jsonl=reports/pytest-events.jsonl --xprobe-repository=myon-bioinformatics/nvd_nist_known_vulns --junitxml=reports/pytest-${{ matrix.python-version }}.xml
       - name: Preserve native observations
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

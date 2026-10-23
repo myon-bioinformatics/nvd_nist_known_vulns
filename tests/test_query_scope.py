@@ -61,6 +61,6 @@ class QueryScopeTests(unittest.TestCase):
     def test_invalid_empty_filter_does_not_emit_completion(self):
         output = io.StringIO()
         with patch.object(nvd, 'fetch_cves') as fetch, contextlib.redirect_stdout(output), contextlib.redirect_stderr(io.StringIO()):
-            self.assertEqual(nvd.main(['--cvss-v3-metrics', '  ']), 1)
+            self.assertEqual(nvd.main(['--cvss-v3-metrics', '  ']), nvd.EXIT_USAGE)
         fetch.assert_not_called()
         self.assertEqual(output.getvalue(), '')

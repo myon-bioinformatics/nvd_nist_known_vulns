@@ -39,3 +39,12 @@ def test_public_vendor_ci_locked_without_repository_writes():
         assert all(s['with']['persist-credentials'] == 'false' for s in steps if s.get('uses','').startswith('actions/checkout@'))
     text = (ROOT / '.github/workflows/python.yml').read_text(encoding='utf-8')
     assert not any(word in text for word in ('VENDOR_UPDATE_TOKEN', 'VENDOR_UPDATES_ENABLED', 'GH_TOKEN', 'git push', 'git commit', 'gh pr', 'continue-on-error', 'vendor-mode', 'vendor-promotion.json'))
+    runtime = (ROOT / '.github/workflows/runtime-compatibility.yml').read_text(encoding='utf-8')
+    assert 'python -S -m unittest discover -s tests -v' in text
+    assert 'python -S -m unittest discover -s tests -p test_nvd_client.py -v' in runtime
+    assert 'uv run --locked pytest' in text
+    assert 'uv run --locked pytest' in runtime
+    assert 'python -m pytest' not in text
+    assert 'python -m pytest' not in runtime
+    project = (ROOT / 'pyproject.toml').read_text(encoding='utf-8')
+    assert 'pythonpath = ["."]' in project

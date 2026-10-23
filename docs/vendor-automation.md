@@ -27,7 +27,7 @@ python -S .vendor-sync-tools/vendor_sync.py check --manifest vendor.lock.json
 python -S .vendor-sync-tools/vendor_sync.py materialize --manifest vendor.lock.json
 python -S .vendor-sync-tools/vendor_sync.py check --manifest vendor.lock.json
 python -S -m unittest discover -s tests -v
-python -m pytest tests
+uv run --locked pytest tests
 ```
 
 Offline local pytest continues to use checked-in copies and does not initiate

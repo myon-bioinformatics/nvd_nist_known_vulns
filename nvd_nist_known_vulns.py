@@ -3,6 +3,10 @@
 Network requests are globally throttled per process; concurrent callers are not synchronized.
 NVD currently publishes the CVE REST API at /cves/2.0 only; there is no public /cves/3.0 stem.
 CVSS v3-series query filters (cvssV3Severity / cvssV3Metrics) are optional parameters on that 2.0 API.
+
+CLI status: 0 success, including zero CVEs; 1 NVD request or output publication failure;
+2 usage or local input error. ``--format json`` writes one nvd-cli-error/1 object to stderr
+on failure. Success output stays JSONL for every format.
 """
 from __future__ import annotations
 
@@ -14,6 +18,7 @@ import difflib
 from email.utils import parsedate_to_datetime
 from http.client import HTTPException, IncompleteRead
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -28,6 +33,10 @@ from urllib.request import Request, urlopen
 NVD_CVE_API = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 DEFAULT_RESULTS_PER_PAGE = 2000
 SCHEMA_VERSION = "nvd-cve-summary/1"
+EXIT_OK = 0
+EXIT_RUNTIME = 1
+EXIT_USAGE = 2
+ERROR_SCHEMA = "nvd-cli-error/1"
 UNAUTHENTICATED_INTERVAL = 6.0
 AUTHENTICATED_INTERVAL = 0.6
 MAX_RETRY_DELAY = 60.0
@@ -669,70 +678,223 @@ def _completion_record(cpe: str, cve_count: int, *, severity: str | None = None,
         ensure_ascii=False, sort_keys=True,
     )
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Fetch known CVEs from NVD by CPE.")
-    parser.add_argument("--silent", action="store_true")
-    parser.add_argument("--config", default="config.ini")
+def _positive_timeout(value: str) -> float:
+    """argparse type: per-request socket timeout in seconds."""
+    try:
+        number = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "timeout must be a positive finite number of seconds"
+        ) from exc
+    if not math.isfinite(number) or number <= 0:
+        raise argparse.ArgumentTypeError(
+            "timeout must be a positive finite number of seconds"
+        )
+    return number
+
+
+def _requested_format(tokens: list[str]) -> str:
+    """Read a canonical --format value even when later parsing fails."""
+    value = "text"
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--":
+            break
+        if token == "--format":
+            if index + 1 < len(tokens):
+                value = tokens[index + 1]
+            index += 2
+            continue
+        if token.startswith("--format="):
+            value = token.split("=", 1)[1]
+        index += 1
+    return value if value in ("text", "json") else "text"
+
+
+def _status_code(value: object) -> int:
+    if value is None:
+        return EXIT_OK
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return EXIT_USAGE
+
+
+def _report_failure(fmt: str, message: str, code: int, *, error: str) -> int:
+    """Print a text line or one nvd-cli-error/1 object. Return ``code``."""
+    if fmt == "json":
+        payload = {
+            "category": "usage" if code == EXIT_USAGE else "runtime",
+            "error": error,
+            "exit_code": code,
+            "message": message,
+            "schema": ERROR_SCHEMA,
+            "status": "error",
+        }
+        print(json.dumps(payload, ensure_ascii=False, sort_keys=True), file=sys.stderr)
+    else:
+        print(f"error: {message}", file=sys.stderr)
+    return code
+
+
+class _AgentArgumentParser(argparse.ArgumentParser):
+    """Flag errors can emit JSON while text mode keeps the usage summary."""
+
+    def error(self, message: str) -> None:
+        if _requested_format(getattr(self, "cli_argv", [])) == "json":
+            _report_failure("json", message, EXIT_USAGE, error="usage")
+            self.exit(EXIT_USAGE)
+        super().error(message)
+
+
+def _build_parser() -> _AgentArgumentParser:
+    parser = _AgentArgumentParser(
+        prog="nvd_nist_known_vulns.py",
+        description=(
+            "Fetch known CVEs from the NVD CVE API 2.0 for CPE 2.3 names "
+            "and write nvd-cve-summary/1 JSONL."
+        ),
+        epilog=(
+            "exit status:\n"
+            "  0  success, including a CPE query that returns zero CVEs\n"
+            "  1  the NVD request failed, or --output could not be published\n"
+            "  2  usage or local input error (flags, config file, or CPE list)\n"
+            "\n"
+            "--format json writes one nvd-cli-error/1 object to stderr on failure and\n"
+            "omits progress lines. Success records stay JSONL on stdout or --output.\n"
+            "--format text (the default) writes error: lines for input and runtime\n"
+            "failures. Flag mistakes also include the usage summary."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--silent",
+        action="store_true",
+        help="Do not print per-CPE progress lines on stderr. Errors are still reported.",
+    )
+    parser.add_argument(
+        "--config",
+        default="config.ini",
+        help=(
+            "UTF-8 INI file with a [cpeName] section, used only when --cpe is omitted. "
+            "Default: config.ini. A missing, unreadable, invalid, or empty CPE list exits 2."
+        ),
+    )
     parser.add_argument(
         "--cpe",
         action="append",
         dest="cpes",
-        help="One CPE 2.3 name to fetch vulnerabilities for. Repeat for multiple names; commas are preserved.",
+        help=(
+            "One CPE 2.3 name to query. Repeat for multiple names. "
+            "Values are not split on commas. When any --cpe is present, --config is not read."
+        ),
     )
-    parser.add_argument("--output")
-    parser.add_argument("--timeout", type=float, default=30.0)
+    parser.add_argument(
+        "--output",
+        help=(
+            "Write JSONL to this UTF-8 path, replacing it only after a finished run. "
+            "Default: stdout. A failed run leaves an existing file unchanged. "
+            "An output path that cannot be published exits 1."
+        ),
+    )
+    parser.add_argument(
+        "--timeout",
+        type=_positive_timeout,
+        default=30.0,
+        metavar="SECONDS",
+        help="Positive finite per-request socket timeout in seconds. Default: 30.",
+    )
+    parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help=(
+            "Failure report on stderr. text (default) prints error: lines for input and "
+            "runtime failures. json prints one nvd-cli-error/1 object and no progress lines. "
+            "Success output is always JSONL."
+        ),
+    )
     parser.add_argument(
         "--cvss-v3-severity",
         choices=("LOW", "MEDIUM", "HIGH", "CRITICAL"),
-        help="Optional NVD cvssV3Severity filter on CVE API 2.0",
+        help=(
+            "Optional NVD cvssV3Severity filter on CVE API 2.0: "
+            "LOW, MEDIUM, HIGH, or CRITICAL. Filtered output uses filtered_cve records."
+        ),
     )
     parser.add_argument(
         "--cvss-v3-metrics",
-        help="Optional NVD cvssV3Metrics filter (partial or full CVSS v3 vector)",
+        help=(
+            "Optional NVD cvssV3Metrics filter: a partial or full CVSS v3 vector. "
+            "Blank values are rejected. The value is trimmed and uppercased."
+        ),
     )
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    tokens = list(sys.argv[1:] if argv is None else argv)
+    parser = _build_parser()
+    parser.cli_argv = tokens
+    try:
+        args = parser.parse_args(tokens)
+    except SystemExit as exc:
+        return _status_code(exc.code)
     temp_path: Path | None = None
     stream: Any = sys.stdout
     try:
-        scope = _query("scope", args.cvss_v3_severity, args.cvss_v3_metrics).get("filters", {})
-        severity = scope.get("cvss_v3_severity")
-        metrics = scope.get("cvss_v3_metrics")
-        if args.cpes:
-            cpes = []
-            for entry in args.cpes:
-                item_clean = entry.strip()
-                if item_clean and item_clean not in cpes:
-                    cpes.append(item_clean)
-        else:
-            cpes = read_ini(args.config)
-        if not cpes:
-            raise ValueError("No CPE names specified")
-        if args.output:
-            target = Path(args.output)
-            handle = tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=target.parent, prefix=target.name + ".", suffix=".tmp", delete=False)
-            stream = handle
-            temp_path = Path(handle.name)
-        for cpe in cpes:
-            if not args.silent:
-                print(f"Fetching NVD CVEs for {cpe}", file=sys.stderr)
-            records = fetch_cves(
-                cpe,
-                api_key=os.environ.get("NVD_API_KEY"),
-                timeout=args.timeout,
-                cvss_v3_severity=severity,
-                cvss_v3_metrics=metrics,
-            )
-            for record in records:
-                print(_record(cpe, record, severity=severity, metrics=metrics), file=stream)
-            print(_completion_record(cpe, len(records), severity=severity, metrics=metrics), file=stream)
-        if args.output:
-            stream.close()
-            Path(temp_path).replace(args.output)
-            temp_path = None
-        return 0
-    except (OSError, ValueError, RuntimeError, HTTPException) as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
+        try:
+            scope = _query("scope", args.cvss_v3_severity, args.cvss_v3_metrics).get("filters", {})
+            severity = scope.get("cvss_v3_severity")
+            metrics = scope.get("cvss_v3_metrics")
+            if args.cpes:
+                cpes: list[str] = []
+                for entry in args.cpes:
+                    item_clean = entry.strip()
+                    if item_clean and item_clean not in cpes:
+                        cpes.append(item_clean)
+            else:
+                cpes = read_ini(args.config)
+            if not cpes:
+                raise ValueError("No CPE names specified")
+        except (OSError, ValueError, configparser.Error) as exc:
+            return _report_failure(args.format, str(exc), EXIT_USAGE, error=type(exc).__name__)
+        try:
+            if args.output:
+                target = Path(args.output)
+                handle = tempfile.NamedTemporaryFile(
+                    "w",
+                    encoding="utf-8",
+                    dir=target.parent,
+                    prefix=target.name + ".",
+                    suffix=".tmp",
+                    delete=False,
+                )
+                stream = handle
+                temp_path = Path(handle.name)
+            for cpe in cpes:
+                if not args.silent and args.format != "json":
+                    print(f"Fetching NVD CVEs for {cpe}", file=sys.stderr)
+                records = fetch_cves(
+                    cpe,
+                    api_key=os.environ.get("NVD_API_KEY"),
+                    timeout=args.timeout,
+                    cvss_v3_severity=severity,
+                    cvss_v3_metrics=metrics,
+                )
+                for record in records:
+                    print(_record(cpe, record, severity=severity, metrics=metrics), file=stream)
+                print(
+                    _completion_record(cpe, len(records), severity=severity, metrics=metrics),
+                    file=stream,
+                )
+            if args.output:
+                stream.close()
+                Path(temp_path).replace(args.output)
+                temp_path = None
+            return EXIT_OK
+        except (OSError, RuntimeError, HTTPException, ValueError) as exc:
+            return _report_failure(args.format, str(exc), EXIT_RUNTIME, error=type(exc).__name__)
     finally:
         if args.output and stream is not sys.stdout and not stream.closed:
             stream.close()

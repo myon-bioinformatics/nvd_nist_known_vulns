@@ -1,6 +1,8 @@
 import importlib.util
 import io
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from email.message import Message
@@ -338,13 +340,15 @@ class Tests(unittest.TestCase):
         self.assertEqual([call.args[0] for call in fetch.call_args_list],[cpe])
 
     def test_cpe_name_alias_removed(self):
-        with mock.patch("sys.stderr",io.StringIO()), self.assertRaises(SystemExit):
-            nvd.main(["--silent","--cpe-name","cpe:1"])
+        stderr=io.StringIO()
+        with mock.patch("sys.stderr",stderr):
+            self.assertEqual(nvd.main(["--silent","--cpe-name","cpe:1"]),2)
+        self.assertIn("unrecognized arguments", stderr.getvalue())
 
     def test_cli_no_cpe_or_config_error(self):
         stderr=io.StringIO()
         with mock.patch("sys.stderr",stderr):
-            self.assertEqual(nvd.main(["--silent","--config","nonexistent.ini"]),1)
+            self.assertEqual(nvd.main(["--silent","--config","nonexistent.ini"]),2)
         self.assertIn("error:", stderr.getvalue())
 
     def test_parse_cpe_name_valid(self):
@@ -384,5 +388,217 @@ class Tests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             nvd.suggest_cpe_names(None, candidates)
+
+
+def _run_cli(args, cwd):
+    """Execute the CLI as a process. Callers must not pass arguments that query NVD."""
+    return subprocess.run(
+        [sys.executable, "-S", str(ROOT / "nvd_nist_known_vulns.py"), *args],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=20,
+        check=False,
+    )
+
+
+class CliProcessTests(unittest.TestCase):
+    """Process-level help, exit codes, and JSON errors. These tests do not contact NVD."""
+
+    def test_help_documents_every_flag_and_exit_status(self):
+        with tempfile.TemporaryDirectory() as directory:
+            completed = _run_cli(["--help"], directory)
+        self.assertEqual(completed.returncode, nvd.EXIT_OK)
+        self.assertEqual(completed.stderr, "")
+        help_text = completed.stdout
+        flat = " ".join(help_text.split())
+        for flag in (
+            "--silent",
+            "--config",
+            "--cpe",
+            "--output",
+            "--timeout",
+            "--format",
+            "--cvss-v3-severity",
+            "--cvss-v3-metrics",
+        ):
+            self.assertIn(flag, flat)
+        self.assertIn("progress", flat)
+        self.assertIn("[cpeName]", flat)
+        self.assertIn("not split on commas", flat)
+        self.assertIn("Positive finite", flat)
+        self.assertIn("nvd-cli-error/1", flat)
+        self.assertIn("exit status:", help_text)
+        self.assertIn("\n  0  success", help_text)
+        self.assertIn("\n  1  the NVD request failed", help_text)
+        self.assertIn("\n  2  usage or local input error", help_text)
+        self.assertIn("LOW, MEDIUM, HIGH, or CRITICAL", flat)
+
+    def test_usage_errors_exit_2_in_text_and_json(self):
+        with tempfile.TemporaryDirectory() as directory:
+            missing = str(Path(directory) / "missing.ini")
+            cases = [
+                (["--silent", "--config", missing], "text"),
+                (["--silent", "--format", "text", "--config", missing], "text"),
+                (["--silent", "--format", "json", "--format", "text", "--config", missing], "text"),
+                (["--bogus"], "text"),
+                (["--timeout", "0", "--config", missing], "text"),
+                (["--timeout", "-1"], "text"),
+                (["--timeout", "nan"], "text"),
+                (["--cvss-v3-severity", "NOPE"], "text"),
+                (["--format", "yaml"], "text"),
+                (["--silent", "--format", "json", "--config", missing], "json"),
+                (["--silent", "--format=json", "--config", missing], "json"),
+                (["--format", "text", "--format", "json", "--config", missing], "json"),
+                (["--bogus", "--format", "json"], "json"),
+                (["--format", "json", "--timeout", "inf"], "json"),
+            ]
+            for args, kind in cases:
+                with self.subTest(args=args, kind=kind):
+                    completed = _run_cli(args, directory)
+                    self.assertEqual(completed.returncode, nvd.EXIT_USAGE)
+                    self.assertNotIn("Traceback", completed.stderr)
+                    self.assertEqual(completed.stdout, "")
+                    if kind == "json":
+                        record = json.loads(completed.stderr)
+                        self.assertEqual(record["schema"], nvd.ERROR_SCHEMA)
+                        self.assertEqual(record["status"], "error")
+                        self.assertEqual(record["category"], "usage")
+                        self.assertEqual(record["exit_code"], nvd.EXIT_USAGE)
+                        self.assertTrue(record["message"])
+                        self.assertTrue(record["error"])
+                    else:
+                        self.assertIn("error:", completed.stderr)
+                        self.assertNotIn(nvd.ERROR_SCHEMA, completed.stderr)
+
+    def test_invalid_config_and_empty_cpe_list_exit_2(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            malformed = root / "bad.ini"
+            malformed.write_text("[cpeName\n", encoding="utf-8")
+            empty = root / "empty.ini"
+            empty.write_text("[cpeName]\n", encoding="utf-8")
+            for path in (malformed, empty):
+                with self.subTest(path=path.name, fmt="text"):
+                    completed = _run_cli(["--silent", "--config", str(path)], directory)
+                    self.assertEqual(completed.returncode, nvd.EXIT_USAGE)
+                    self.assertIn("error:", completed.stderr)
+                    self.assertNotIn("Traceback", completed.stderr)
+                with self.subTest(path=path.name, fmt="json"):
+                    completed = _run_cli(
+                        ["--format", "json", "--config", str(path)], directory
+                    )
+                    self.assertEqual(completed.returncode, nvd.EXIT_USAGE)
+                    record = json.loads(completed.stderr)
+                    self.assertEqual(record["category"], "usage")
+                    self.assertEqual(record["exit_code"], 2)
+                    self.assertEqual(record["schema"], "nvd-cli-error/1")
+                    self.assertNotIn("Fetching", completed.stderr)
+
+    def test_unpublished_output_exits_1_without_network(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory) / "not-a-directory"
+            parent.write_text("occupied", encoding="utf-8")
+            output = parent / "result.jsonl"
+            cpe = "cpe:2.3:a:example:app:1:*:*:*:*:*:*:*"
+            text = _run_cli(
+                ["--silent", "--cpe", cpe, "--output", str(output), "--timeout", "1"],
+                directory,
+            )
+            self.assertEqual(text.returncode, nvd.EXIT_RUNTIME)
+            self.assertIn("error:", text.stderr)
+            self.assertIn("directory", text.stderr.lower())
+            self.assertNotIn("NVD HTTP", text.stderr)
+            self.assertNotIn("Traceback", text.stderr)
+            self.assertEqual(text.stdout, "")
+            self.assertFalse(output.exists())
+            json_run = _run_cli(
+                ["--format", "json", "--cpe", cpe, "--output", str(output), "--timeout", "1"],
+                directory,
+            )
+            self.assertEqual(json_run.returncode, nvd.EXIT_RUNTIME)
+            record = json.loads(json_run.stderr)
+            self.assertEqual(record["category"], "runtime")
+            self.assertEqual(record["exit_code"], 1)
+            self.assertEqual(record["status"], "error")
+            self.assertEqual(record["schema"], nvd.ERROR_SCHEMA)
+            self.assertNotEqual(record["error"], "usage")
+            self.assertEqual(json_run.stdout, "")
+            self.assertNotIn("Fetching", json_run.stderr)
+            self.assertIn("directory", record["message"].lower())
+            self.assertNotIn("NVD HTTP", record["message"])
+
+
+class CliFormatTests(unittest.TestCase):
+    def test_json_success_keeps_jsonl_and_skips_progress(self):
+        record = {
+            "id": "CVE-T", "description": "test", "cwe": [], "cvss_v4": None,
+            "cvss_v3": None, "cvss_v2": None, "published": None,
+            "last_modified": None, "source_identifier": None,
+        }
+        stderr = io.StringIO()
+        stdout = io.StringIO()
+        with mock.patch.object(nvd, "fetch_cves", return_value=[record]) as fetch, \
+                mock.patch("sys.stderr", stderr), mock.patch("sys.stdout", stdout):
+            code = nvd.main(["--format", "json", "--cpe", "cpe:1"])
+        self.assertEqual(code, nvd.EXIT_OK)
+        self.assertEqual(stderr.getvalue(), "")
+        rows = [json.loads(line) for line in stdout.getvalue().split("\n") if line]
+        self.assertEqual([row["kind"] for row in rows], ["cve", "query_complete"])
+        self.assertEqual(fetch.call_args.kwargs["timeout"], 30.0)
+
+    def test_text_progress_and_json_runtime_record(self):
+        stderr = io.StringIO()
+        with mock.patch.object(nvd, "fetch_cves", return_value=[]), \
+                mock.patch("sys.stderr", stderr), mock.patch("sys.stdout", io.StringIO()):
+            self.assertEqual(nvd.main(["--cpe", "cpe:1"]), 0)
+        self.assertIn("Fetching NVD CVEs for cpe:1", stderr.getvalue())
+
+        stderr = io.StringIO()
+        stdout = io.StringIO()
+        with mock.patch.object(nvd, "fetch_cves", side_effect=RuntimeError("boom")), \
+                mock.patch("sys.stderr", stderr), mock.patch("sys.stdout", stdout):
+            self.assertEqual(nvd.main(["--format", "json", "--cpe", "cpe:1"]), nvd.EXIT_RUNTIME)
+        self.assertEqual(stdout.getvalue(), "")
+        record = json.loads(stderr.getvalue())
+        self.assertEqual(record, {
+            "category": "runtime",
+            "error": "RuntimeError",
+            "exit_code": 1,
+            "message": "boom",
+            "schema": nvd.ERROR_SCHEMA,
+            "status": "error",
+        })
+
+    def test_json_failure_after_partial_stdout_stays_on_stderr(self):
+        ok = {"id": "CVE-T", "description": None, "cwe": [], "cvss_v4": None,
+              "cvss_v3": None, "cvss_v2": None, "published": None,
+              "last_modified": None, "source_identifier": None}
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with mock.patch.object(nvd, "fetch_cves", side_effect=[[ok], RuntimeError("boom")]), \
+                mock.patch("sys.stdout", stdout), mock.patch("sys.stderr", stderr):
+            code = nvd.main(["--format", "json", "--cpe", "cpe:ok", "--cpe", "cpe:failed"])
+        self.assertEqual(code, 1)
+        rows = [json.loads(line) for line in stdout.getvalue().split("\n") if line]
+        self.assertEqual([row["kind"] for row in rows], ["cve", "query_complete"])
+        self.assertEqual(json.loads(stderr.getvalue())["message"], "boom")
+        self.assertNotIn("Fetching", stderr.getvalue())
+
+    def test_output_path_failure_does_not_query_nvd(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory) / "not-a-directory"
+            parent.write_text("occupied", encoding="utf-8")
+            stderr = io.StringIO()
+            with mock.patch.object(nvd, "fetch_cves") as fetch, mock.patch("sys.stderr", stderr):
+                code = nvd.main([
+                    "--silent", "--cpe", "cpe:2.3:a:example:app:1:*:*:*:*:*:*:*",
+                    "--output", str(parent / "result.jsonl"),
+                ])
+        self.assertEqual(code, nvd.EXIT_RUNTIME)
+        fetch.assert_not_called()
+        self.assertIn("error:", stderr.getvalue())
+
 
 if __name__=="__main__": unittest.main()
