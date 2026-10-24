@@ -1,0 +1,7 @@
+{
+  "name": "nvd-nist-known-vulns",
+  "private": true,
+  "engines": {
+    "node": ">=24"
+  }
+}
