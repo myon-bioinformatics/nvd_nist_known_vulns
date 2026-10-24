@@ -125,6 +125,17 @@ class NodeEntryTests(unittest.TestCase):
 class NodeProbeTests(unittest.TestCase):
     """_node() returns None unless a Node 24+ binary answers --version."""
 
+    def test_ci_job_requires_node_when_marked(self):
+        # Covers the GITHUB_ACTIONS + GITHUB_JOB == test branch in test_ci_enables_node_parity_in_test_job.
+        suite = NodeEntryTests("test_ci_enables_node_parity_in_test_job")
+        with mock.patch.dict(os.environ, {"GITHUB_ACTIONS": "true", "GITHUB_JOB": "test"}), \
+                mock.patch(f"{__name__}.NODE", "/usr/bin/node"):
+            suite.test_ci_enables_node_parity_in_test_job()
+        with mock.patch.dict(os.environ, {"GITHUB_ACTIONS": "true", "GITHUB_JOB": "test"}), \
+                mock.patch(f"{__name__}.NODE", None):
+            with self.assertRaises(AssertionError):
+                suite.test_ci_enables_node_parity_in_test_job()
+
     def test_no_node_anywhere(self):
         with mock.patch.dict(os.environ, {"NODE": ""}), mock.patch.object(shutil, "which", return_value=None):
             self.assertIsNone(_node())
