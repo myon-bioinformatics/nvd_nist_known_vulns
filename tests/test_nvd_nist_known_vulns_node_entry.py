@@ -10,7 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
+import tempfile
+import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 TOOL = "nvd_nist_known_vulns"
@@ -31,7 +32,7 @@ def _node() -> str | None:
 
 
 NODE = _node()
-needs_node = pytest.mark.skipif(NODE is None, reason="Node 24+ not available (set NODE)")
+needs_node = unittest.skipIf(NODE is None, "Node 24+ not available (set NODE)")
 
 
 def _env() -> dict[str, str]:
@@ -53,56 +54,62 @@ def _parity(root: Path, args: list[str]) -> tuple[tuple[int, str, str], tuple[in
     return via_node, via_python
 
 
-def test_vendored_launcher_matches_lock():
-    lock = json.loads((ROOT / "vendor.lock.json").read_text(encoding="utf-8"))
-    entry = next(f for f in lock["files"] if f["destination"] == "vendor/py_launch.cjs")
-    assert entry["repository"] == "myon-bioinformatics/myon-bioinformatics"
-    assert entry["source"] == "py_launch.cjs"
-    data = (ROOT / "vendor" / "py_launch.cjs").read_bytes()
-    assert hashlib.sha256(data).hexdigest() == entry["sha256"]
-    blob = hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
-    assert blob == entry["blob_sha"]
+class NodeEntryTests(unittest.TestCase):
+    def test_vendored_launcher_matches_lock(self):
+        lock = json.loads((ROOT / "vendor.lock.json").read_text(encoding="utf-8"))
+        entry = next(f for f in lock["files"] if f["destination"] == "vendor/py_launch.cjs")
+        self.assertEqual(entry["repository"], "myon-bioinformatics/myon-bioinformatics")
+        self.assertEqual(entry["source"], "py_launch.cjs")
+        data = (ROOT / "vendor" / "py_launch.cjs").read_bytes()
+        self.assertEqual(hashlib.sha256(data).hexdigest(), entry["sha256"])
+        blob = hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
+        self.assertEqual(blob, entry["blob_sha"])
+
+    def test_entry_uses_shared_launcher_only(self):
+        text = (ROOT / f"{TOOL}.cjs").read_text(encoding="utf-8")
+        self.assertIn('require("./vendor/py_launch.cjs")', text)
+        self.assertNotIn("child_process", text)
+        self.assertIn(f'"{TOOL}.py"', text)
+        pkg = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
+        self.assertEqual(pkg["engines"]["node"], ">=24")
+
+    @needs_node
+    def test_node_matches_python(self):
+        for case in CASES:
+            with self.subTest(case["id"]):
+                via_node, via_python = _parity(ROOT, case["args"])
+                self.assertEqual(via_python[0], case["rc"])
+                self.assertEqual(via_node, via_python)
+
+    @needs_node
+    def test_missing_interpreter_is_launcher_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = _env()
+            env[ENV_VAR] = str(Path(tmp) / "no-such-python")
+            p = subprocess.run([NODE, str(ROOT / f"{TOOL}.cjs"), "--help"], env=env,
+                               capture_output=True, text=True, timeout=60)
+        self.assertEqual(p.returncode, 2)
+        self.assertEqual(p.stdout, "")
+
+    @needs_node
+    def test_mutated_entry_breaks_parity(self):
+        mutations = [
+            (f'"{TOOL}.py"', '"missing_tool.py"'),
+            ("main(PY_SCRIPT, PY_LAUNCH);", "main(PY_SCRIPT, { ...PY_LAUNCH, argv: [] });"),
+            ("noSite: true", "noSite: true, isolated: true, argv: ['--help']"),
+        ]
+        text = (ROOT / f"{TOOL}.cjs").read_text(encoding="utf-8")
+        for old, new in mutations:
+            with self.subTest(old), tempfile.TemporaryDirectory() as tmp:
+                tmp_path = Path(tmp)
+                (tmp_path / "vendor").mkdir()
+                shutil.copy(ROOT / "vendor" / "py_launch.cjs", tmp_path / "vendor" / "py_launch.cjs")
+                shutil.copy(ROOT / f"{TOOL}.py", tmp_path / f"{TOOL}.py")
+                self.assertIn(old, text)
+                (tmp_path / f"{TOOL}.cjs").write_text(text.replace(old, new), encoding="utf-8")
+                self.assertTrue(any(_parity(tmp_path, c["args"])[0] != _parity(ROOT, c["args"])[1]
+                                    for c in CASES))
 
 
-def test_entry_uses_shared_launcher_only():
-    text = (ROOT / f"{TOOL}.cjs").read_text(encoding="utf-8")
-    assert 'require("./vendor/py_launch.cjs")' in text
-    assert "child_process" not in text
-    assert f'"{TOOL}.py"' in text
-    pkg = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
-    assert pkg["engines"]["node"] == ">=24"
-
-
-@needs_node
-@pytest.mark.parametrize("args,expected_rc", [(c["args"], c["rc"]) for c in CASES],
-                         ids=[c["id"] for c in CASES])
-def test_node_matches_python(args, expected_rc):
-    via_node, via_python = _parity(ROOT, args)
-    assert via_python[0] == expected_rc
-    assert via_node == via_python
-
-
-@needs_node
-def test_missing_interpreter_is_launcher_failure(tmp_path):
-    env = _env()
-    env[ENV_VAR] = str(tmp_path / "no-such-python")
-    p = subprocess.run([NODE, str(ROOT / f"{TOOL}.cjs"), "--help"], env=env,
-                       capture_output=True, text=True, timeout=60)
-    assert p.returncode == 2
-    assert p.stdout == ""
-
-
-@needs_node
-@pytest.mark.parametrize("old,new", [
-    (f'"{TOOL}.py"', '"missing_tool.py"'),
-    ("main(PY_SCRIPT, PY_LAUNCH);", "main(PY_SCRIPT, { ...PY_LAUNCH, argv: [] });"),
-    ("noSite: true", "noSite: true, isolated: true, argv: ['--help']"),
-])
-def test_mutated_entry_breaks_parity(tmp_path, old, new):
-    (tmp_path / "vendor").mkdir()
-    shutil.copy(ROOT / "vendor" / "py_launch.cjs", tmp_path / "vendor" / "py_launch.cjs")
-    shutil.copy(ROOT / f"{TOOL}.py", tmp_path / f"{TOOL}.py")
-    text = (ROOT / f"{TOOL}.cjs").read_text(encoding="utf-8")
-    assert old in text
-    (tmp_path / f"{TOOL}.cjs").write_text(text.replace(old, new), encoding="utf-8")
-    assert any(_parity(tmp_path, c["args"])[0] != _parity(ROOT, c["args"])[1] for c in CASES)
+if __name__ == "__main__":
+    unittest.main()
