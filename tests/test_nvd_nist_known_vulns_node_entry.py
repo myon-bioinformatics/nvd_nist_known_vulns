@@ -8,10 +8,10 @@ import re
 import shutil
 import subprocess
 import sys
-from pathlib import Path
-
 import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 TOOL = "nvd_nist_known_vulns"
@@ -109,6 +109,25 @@ class NodeEntryTests(unittest.TestCase):
                 (tmp_path / f"{TOOL}.cjs").write_text(text.replace(old, new), encoding="utf-8")
                 self.assertTrue(any(_parity(tmp_path, c["args"])[0] != _parity(ROOT, c["args"])[1]
                                     for c in CASES))
+
+
+class NodeProbeTests(unittest.TestCase):
+    """_node() returns None unless a Node 24+ binary answers --version."""
+
+    def test_no_node_anywhere(self):
+        with mock.patch.dict(os.environ, {"NODE": ""}), mock.patch.object(shutil, "which", return_value=None):
+            self.assertIsNone(_node())
+
+    def test_unrunnable_node(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {"NODE": str(Path(tmp) / "no-such-node")}):
+                self.assertIsNone(_node())
+
+    def test_version_gate(self):
+        for out, ok in (("v20.19.2\n", False), ("v23.9.0\n", False), ("v24.0.0\n", True), ("v100.1.0\n", True), ("garbage\n", False)):
+            with self.subTest(out), mock.patch.dict(os.environ, {"NODE": "fake-node"}), \
+                    mock.patch.object(subprocess, "run", return_value=subprocess.CompletedProcess([], 0, out, "")):
+                self.assertEqual(_node(), "fake-node" if ok else None)
 
 
 if __name__ == "__main__":
