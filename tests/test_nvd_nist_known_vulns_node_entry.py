@@ -61,7 +61,9 @@ class NodeEntryTests(unittest.TestCase):
         self.assertIn("actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1", job)
         self.assertIn("node-version: '26'", job)
         self.assertIn("Require supported Node in parity CI", job)
-        if os.environ.get("GITHUB_ACTIONS") == "true":
+        # This repo also has a stdlib/development compatibility workflow;
+        # require Node only in the main "test" matrix that provisions Node 26.
+        if os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("GITHUB_JOB") == "test":
             self.assertIsNotNone(NODE, "Node 24+ must be installed for CI tests")
 
     def test_vendored_launcher_matches_lock(self):
