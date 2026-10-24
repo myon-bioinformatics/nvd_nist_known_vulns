@@ -55,6 +55,15 @@ def _parity(root: Path, args: list[str]) -> tuple[tuple[int, str, str], tuple[in
 
 
 class NodeEntryTests(unittest.TestCase):
+    def test_ci_enables_node_parity_in_test_job(self):
+        workflow = (ROOT / ".github/workflows/python.yml").read_text(encoding="utf-8")
+        job = workflow.split("\n  test:\n", 1)[1].split("\n  failure-identity:", 1)[0]
+        self.assertIn("actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1", job)
+        self.assertIn("node-version: '26'", job)
+        self.assertIn("Require supported Node in parity CI", job)
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            self.assertIsNotNone(NODE, "Node 24+ must be installed for CI tests")
+
     def test_vendored_launcher_matches_lock(self):
         lock = json.loads((ROOT / "vendor.lock.json").read_text(encoding="utf-8"))
         entry = next(f for f in lock["files"] if f["destination"] == "vendor/py_launch.cjs")
