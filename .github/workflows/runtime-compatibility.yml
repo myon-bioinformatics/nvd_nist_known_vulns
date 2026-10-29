@@ -8,7 +8,9 @@ permissions:
   contents: read
 jobs:
   runtime:
-    runs-on: ${{ matrix.os }}
+    # Python 3.9 has no setup-python binary for Ubuntu 26.04.
+    # Preserve stdlib coverage on 24.04; other OS/Python lanes stay unchanged.
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && matrix.python == '3.9' && 'ubuntu-24.04' || matrix.os }}
     strategy:
       fail-fast: false
       matrix:
