@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-VENDOR_TOOL_PIN = "2192ff22acafdd09e80ac722df91ee937aaedd5e"
+VENDOR_TOOL_PIN = "9e3da7ae1846e9604ebc24bb5178f7de094a4e77"
 
 
 def test_public_vendor_ci_locked_without_repository_writes():
