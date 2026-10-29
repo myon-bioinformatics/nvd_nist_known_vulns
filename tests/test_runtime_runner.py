@@ -1,12 +1,13 @@
 """Keep the legacy stdlib lane on an available Python binary platform."""
 from pathlib import Path
 
-import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_only_linux_python39_uses_ubuntu_2404():
+    import yaml
+
     workflow = yaml.load(
         (ROOT / '.github/workflows/runtime-compatibility.yml').read_text(encoding='utf-8'),
         Loader=yaml.BaseLoader,
