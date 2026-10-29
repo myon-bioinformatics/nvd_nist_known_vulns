@@ -8,7 +8,9 @@ permissions:
   contents: read
 jobs:
   runtime:
-    runs-on: ${{ matrix.os }}
+    # Python 3.9 has no setup-python binary for Ubuntu 26.04.
+    # Preserve stdlib coverage on 24.04; other OS/Python lanes stay unchanged.
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && matrix.python == '3.9' && 'ubuntu-24.04' || matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -73,7 +75,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-    uses: myon-bioinformatics/myon-bioinformatics/.github/workflows/reusable-junit-identity.yml@2192ff22acafdd09e80ac722df91ee937aaedd5e
+    uses: myon-bioinformatics/myon-bioinformatics/.github/workflows/reusable-junit-identity.yml@9e3da7ae1846e9604ebc24bb5178f7de094a4e77
     with:
       commit-sha: ${{ github.event.pull_request.head.sha || github.sha }}
       expected-reports: '["junit-portability-windows-latest/portability-windows-latest.xml","junit-portability-macos-latest/portability-macos-latest.xml"]'
