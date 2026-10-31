@@ -1,11 +1,11 @@
-"""Keep the legacy stdlib lane on an available Python binary platform."""
+"""The legacy stdlib lane gets its Python from uv on the current runner image."""
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_only_linux_python39_uses_ubuntu_2404():
+def test_python39_lane_uses_the_same_runner_as_the_others():
     import yaml
 
     workflow = yaml.load(
@@ -13,7 +13,7 @@ def test_only_linux_python39_uses_ubuntu_2404():
         Loader=yaml.BaseLoader,
     )
     runtime = workflow['jobs']['runtime']
-    assert runtime['runs-on'] == "${{ matrix.os == 'ubuntu-latest' && matrix.python == '3.9' && 'ubuntu-24.04' || matrix.os }}"
+    assert runtime['runs-on'] == '${{ matrix.os }}'
     assert runtime['strategy']['matrix'] == {
         'os': ['ubuntu-latest'],
         'python': ['3.9', '3.10', '3.11', '3.12', '3.13', '3.14'],
