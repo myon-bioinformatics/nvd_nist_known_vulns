@@ -148,7 +148,7 @@ python -S -m unittest discover -s tests -v
 
 Tests are offline and do not consume NVD rate limits.
 
-Install test-only tools with `uv pip install -r tests/requirements.txt`.
+Test-only tools come from the `dev` dependency group, so `uv run pytest` installs them; `tests/requirements.txt` is for pip inside an active virtual environment.
 The locked pytest lane runs with `uv run --locked pytest`. Pytest's
 `pythonpath` includes the repository root so that entry point can import this
 flat module. The `python -S` unittest runtime lane stays free of pytest and
