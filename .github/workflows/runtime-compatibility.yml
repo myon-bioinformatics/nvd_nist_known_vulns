@@ -8,9 +8,7 @@ permissions:
   contents: read
 jobs:
   runtime:
-    # Python 3.9 has no setup-python binary for Ubuntu 26.04.
-    # Preserve stdlib coverage on 24.04; other OS/Python lanes stay unchanged.
-    runs-on: ${{ matrix.os == 'ubuntu-latest' && matrix.python == '3.9' && 'ubuntu-24.04' || matrix.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -27,9 +25,12 @@ jobs:
             python: "3.14"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          python-version: ${{ matrix.python }}
+          version: "0.13.3"
+          python-version: "${{ matrix.python }}"
+          activate-environment: true
+          enable-cache: false
       - name: Exercise runtime behavior without site-packages
         run: python -S -m unittest discover -s tests -p test_nvd_client.py -v
 
@@ -48,12 +49,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.11"
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: "0.13.3"
+          python-version: "3.11"
+          activate-environment: true
+          enable-cache: false
       - name: Sync locked development environment
         run: uv sync --locked --python "$(python -c 'import sys; print(sys.executable)')"
       - name: Run portability tests with raw JUnit
