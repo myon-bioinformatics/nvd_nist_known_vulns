@@ -73,6 +73,13 @@ jobs:
           node-version: '26'
       - name: Require supported Node in parity CI
         run: node -e "if (+process.versions.node.split('.')[0] < 24) process.exit(1)"
+      - name: Install test-only dependencies
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.3"
+          python-version: "${{ matrix.python-version }}"
+          activate-environment: true
+          enable-cache: false
       - name: Check out the pinned vendor placement tool
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -92,13 +99,6 @@ jobs:
       - run: python -S -m py_compile nvd_nist_known_vulns.py
       - run: python -S -m unittest discover -s tests -v
 
-      - name: Install test-only dependencies
-        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-        with:
-          version: "0.13.3"
-          python-version: "${{ matrix.python-version }}"
-          activate-environment: true
-          enable-cache: false
       - name: Sync locked development environment
         shell: bash
         run: uv sync --locked --python "$(python -c 'import sys; print(sys.executable)')"
