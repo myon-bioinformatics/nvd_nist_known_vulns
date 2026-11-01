@@ -84,7 +84,7 @@ class NodeEntryTests(unittest.TestCase):
         self.assertNotIn("child_process", text)
         self.assertIn(f'"{TOOL}.py"', text)
         pkg = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
-        self.assertEqual(pkg["engines"]["node"], ">=24")
+        self.assertEqual(pkg["engines"]["node"], ">=26")
 
     @needs_node
     def test_node_matches_python(self):
