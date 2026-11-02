@@ -69,7 +69,7 @@ remains the authority for adopted bytes.
 ## Shared Node launcher baseline
 
 Only `vendor/py_launch.cjs` advances to parent commit
-`1f6f1e345f640827703e2872151a73b4cbdfd382` (parent PR #194), with exact upstream
+`384f5dd532076062f7833038764e9a62322c387c` (parent PR #194), with exact upstream
 bytes and matching Git blob/SHA-256 in the lock. Other vendor entries and the
 placement/workflow tool pins are unchanged.
 
