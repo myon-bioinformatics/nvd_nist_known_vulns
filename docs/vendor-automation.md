@@ -69,7 +69,7 @@ remains the authority for adopted bytes.
 ## Shared Node launcher baseline
 
 Only `vendor/py_launch.cjs` advances to parent commit
-`1116d5c4f55d25af4d21cfe9b3c88f49d3a476fa` (parent PR #171), with exact upstream
+`384f5dd532076062f7833038764e9a62322c387c` (parent PR #194), with exact upstream
 bytes and matching Git blob/SHA-256 in the lock. Other vendor entries and the
 placement/workflow tool pins are unchanged.
 
@@ -77,5 +77,5 @@ The entry's `noSite: true` applies to interpreter discovery and execution. The
 shared launcher's separate opt-in `isolated` flag also applies to discovery;
 it remains off for this entry. POSIX signal forwarding stays active after a
 child acknowledges SIGINT, so another SIGINT and then SIGTERM still reach it.
-Signal termination preserves exit 2 and text/JSON diagnostics. The Node >=24
+Signal termination preserves exit 2 and text/JSON diagnostics. The Node >=26
 minimum and Node 26 CI configuration are unchanged.
