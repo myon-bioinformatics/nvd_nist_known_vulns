@@ -77,5 +77,5 @@ The entry's `noSite: true` applies to interpreter discovery and execution. The
 shared launcher's separate opt-in `isolated` flag also applies to discovery;
 it remains off for this entry. POSIX signal forwarding stays active after a
 child acknowledges SIGINT, so another SIGINT and then SIGTERM still reach it.
-Signal termination preserves exit 2 and text/JSON diagnostics. The Node >=24
+Signal termination preserves exit 2 and text/JSON diagnostics. The Node >=26
 minimum and Node 26 CI configuration are unchanged.
