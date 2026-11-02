@@ -148,7 +148,7 @@ class NodeProbeTests(unittest.TestCase):
                 self.assertIsNone(_node())
 
     def test_version_gate(self):
-        for out, ok in (("v20.19.2\n", False), ("v23.9.0\n", False), ("v24.0.0\n", True), ("v100.1.0\n", True), ("garbage\n", False)):
+        for out, ok in (("v20.19.2\n", False), ("v23.9.0\n", False), ("v26.0.0\n", True), ("v100.1.0\n", True), ("garbage\n", False)):
             with self.subTest(out), mock.patch.dict(os.environ, {"NODE": "fake-node"}), \
                     mock.patch.object(subprocess, "run", return_value=subprocess.CompletedProcess([], 0, out, "")):
                 self.assertEqual(_node(), "fake-node" if ok else None)
