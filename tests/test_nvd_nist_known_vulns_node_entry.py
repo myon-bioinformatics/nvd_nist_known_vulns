@@ -30,11 +30,11 @@ def _node() -> str | None:
     except (OSError, subprocess.SubprocessError):
         return None
     match = re.match(r"v(\d+)", out.strip())
-    return node if match and int(match.group(1)) >= 24 else None
+    return node if match and int(match.group(1)) >= 26 else None
 
 
 NODE = _node()
-needs_node = unittest.skipIf(NODE is None, "Node 24+ not available (set NODE)")
+needs_node = unittest.skipIf(NODE is None, "Node 26+ not available (set NODE)")
 
 
 def _env() -> dict[str, str]:
@@ -66,7 +66,7 @@ class NodeEntryTests(unittest.TestCase):
         # This repo also has a stdlib/development compatibility workflow;
         # require Node only in the main "test" matrix that provisions Node 26.
         if os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("GITHUB_JOB") == "test":
-            self.assertIsNotNone(NODE, "Node 24+ must be installed for CI tests")
+            self.assertIsNotNone(NODE, "Node 26+ must be installed for CI tests")
 
     def test_vendored_launcher_matches_lock(self):
         lock = json.loads((ROOT / "vendor.lock.json").read_text(encoding="utf-8"))
@@ -84,7 +84,7 @@ class NodeEntryTests(unittest.TestCase):
         self.assertNotIn("child_process", text)
         self.assertIn(f'"{TOOL}.py"', text)
         pkg = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
-        self.assertEqual(pkg["engines"]["node"], ">=24")
+        self.assertEqual(pkg["engines"]["node"], ">=26")
 
     @needs_node
     def test_node_matches_python(self):
@@ -125,7 +125,7 @@ class NodeEntryTests(unittest.TestCase):
 
 
 class NodeProbeTests(unittest.TestCase):
-    """_node() returns None unless a Node 24+ binary answers --version."""
+    """_node() returns None unless a Node 26+ binary answers --version."""
 
     def test_ci_job_requires_node_when_marked(self):
         # Covers the GITHUB_ACTIONS + GITHUB_JOB == test branch in test_ci_enables_node_parity_in_test_job.
@@ -160,7 +160,7 @@ class LauncherRegressionTests(unittest.TestCase):
     def setUp(self):
         self.node = NODE
         if self.node is None:
-            self.skipTest("Node 24+ is required for launcher regressions")
+            self.skipTest("Node 26+ is required for launcher regressions")
         self.root = Path(__file__).resolve().parents[1]
         self.tool = TOOL
         self.env = dict(os.environ)
