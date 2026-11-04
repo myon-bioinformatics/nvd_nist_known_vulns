@@ -24,7 +24,8 @@ def main():
             start=time.perf_counter_ns()
             result=fn(rows,names)
             elapsed=time.perf_counter_ns()-start
-            assert result==expected
+            if not (result==expected):
+                raise SystemExit('benchmark_cpe_count_index: result mismatch')
             if repeat:samples[k].append(elapsed)
     print(json.dumps({'python':sys.version,'baseline_sha':sha,'cpes':100,'rows':len(rows),'samples_ns':samples,
                       'median_ns':{k:statistics.median(v) for k,v in samples.items()}},indent=2))
