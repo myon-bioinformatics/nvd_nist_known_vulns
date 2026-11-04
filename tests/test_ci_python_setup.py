@@ -1,6 +1,7 @@
 """Keep Python setup effective before CI's stdlib checks (stdlib-only tests)."""
 from pathlib import Path
 import re
+import tomllib
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +16,15 @@ def job_text(path, name):
 
 
 class TestCIPythonSetup(unittest.TestCase):
+    def test_project_and_lock_declare_python311_without_runtime_dependencies(self):
+        project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
+        self.assertEqual(project["project"]["requires-python"], ">=3.11")
+        self.assertEqual(lock["requires-python"], project["project"]["requires-python"])
+        self.assertEqual(project["project"]["dependencies"], [])
+        self.assertFalse(project["tool"]["uv"]["package"])
+        self.assertEqual(project["tool"]["uv"]["dependency-groups"]["dev"]["requires-python"], ">=3.11")
+
     def test_setup_precedes_first_plain_python_command(self):
         job = job_text(".github/workflows/python.yml", "test")
         setup = job.index("uses: astral-sh/setup-uv@")
