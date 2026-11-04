@@ -1,11 +1,11 @@
-"""The legacy stdlib lane gets its Python from uv on the current runner image."""
+"""Keep the supported stdlib matrix and its existing OS coverage explicit."""
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_python39_lane_uses_the_same_runner_as_the_others():
+def test_supported_runtime_versions_keep_existing_os_coverage():
     import yaml
 
     workflow = yaml.load(
@@ -16,11 +16,11 @@ def test_python39_lane_uses_the_same_runner_as_the_others():
     assert runtime['runs-on'] == '${{ matrix.os }}'
     assert runtime['strategy']['matrix'] == {
         'os': ['ubuntu-latest'],
-        'python': ['3.9', '3.10', '3.11', '3.12', '3.13', '3.14'],
+        'python': ['3.11', '3.12', '3.13', '3.14'],
         'include': [
-            {'os': 'windows-latest', 'python': '3.9'},
+            {'os': 'windows-latest', 'python': '3.11'},
             {'os': 'windows-latest', 'python': '3.14'},
-            {'os': 'macos-15-intel', 'python': '3.9'},
+            {'os': 'macos-15-intel', 'python': '3.11'},
             {'os': 'macos-latest', 'python': '3.14'},
         ],
     }

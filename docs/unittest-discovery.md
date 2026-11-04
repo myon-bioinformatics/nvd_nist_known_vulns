@@ -1,13 +1,14 @@
 # Focused standard-library test discovery
 
-Run from this repository root with Python 3.9 or newer. These commands use
+Run from this repository root with Python 3.11 or newer. These commands use
 Python’s built-in test runner; the listed checks need no third-party Python
 package or browser installation. `-S` disables automatic `site` initialization
 and its usual site-packages path additions; it is not a complete isolation boundary.
 
-The stdlib runtime floor above is separate from the Python 3.11+
-uv/pytest development environment. The validation below covers CPython 3.12.14,
-not every supported Python version.
+The runtime and uv/pytest development environment share the Python 3.11+ floor
+declared in `pyproject.toml`. The runtime remains independent of the development
+dependencies. The validation below covers CPython 3.12.14, not every supported
+Python version.
 
 ```sh
 python -S -m unittest discover -s tests -p test_nvd_client.py -v

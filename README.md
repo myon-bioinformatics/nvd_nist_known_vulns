@@ -6,7 +6,7 @@
 
 [Icon](docs/brand/icon.png) · [Favicon](docs/brand/favicon.png)
 
-**Python compatibility:** CI-tested on Python 3.9–3.14.
+**Python compatibility:** supports Python 3.11+, declared in `pyproject.toml`; CI tests Python 3.11–3.14.
 Single-file, Python-standard-library client for the NVD CVE API 2.0. It fetches vulnerabilities for CPE 2.3 names and emits deterministic JSON Lines suitable for CLI use, CI, offline processing, and cross-repository adapters.
 
 NVD’s public CVE REST path remains `/rest/json/cves/2.0` (a `/cves/3.0` probe returns 404). This client stays on 2.0 and adds CVSS v3-series request filters plus local CVSS base-score calculation for v2 / v3.0 / v3.1 vectors.
@@ -205,8 +205,10 @@ When `--cpe` is provided, it replaces the CPE names from `config.ini`. Without i
 
 ## Runtime and development Python policy
 
-The standard-library runtime supports Python 3.9+; this change preserves the
-existing runtime floor. The separate `runtime-compatibility` CI lane executes
+The standard-library runtime, including standalone and vendored copies, supports
+Python 3.11+. This is the supported/tested floor, not a claim that older
+interpreters cannot execute any part of the module. The separate
+`runtime-compatibility` CI lane executes
 behavior tests with `python -S`, without installing pytest or any third-party
 package. Development/test environments use Python 3.11+ and a committed uv lock:
 
@@ -216,10 +218,19 @@ uv run --locked pytest
 python -S -m unittest discover -s tests -p test_nvd_client.py -v
 ```
 
-`pyproject.toml` is the canonical development dependency definition. The runtime
-has no third-party dependencies, and `tests/requirements.txt` lists only the
-test-only tools. Runtime metadata does not
-raise the source/vendoring floor to the development floor. CI pins setup-uv v10.3.3 by full commit SHA, gets Python from it
+`pyproject.toml` is the canonical Python requirement and development dependency
+definition: `project.requires-python = ">=3.11"` applies to source runtime support
+as well as development. The runtime has no third-party dependencies, and
+`tests/requirements.txt` lists only the test-only tools. A copied `.py` file does
+not read project metadata; consumers must select Python 3.11+ themselves. This
+policy does not update consumers' vendored files or interpreter settings.
+
+The Node entry uses a pinned shared launcher that still probes for Python 3.9+;
+that discovery threshold is not this tool's support policy. Set
+`NVD_NIST_KNOWN_VULNS_PYTHON` to a Python 3.11+ executable for supported use.
+The launcher and its vendor pin are unchanged.
+
+CI pins setup-uv v10.3.3 by full commit SHA, gets Python from it
 (`actions/setup-python` is not used), and uses the latest uv. Setup actions
 using Node 24 require runner 2.327.1 or newer (GitHub-hosted runners are used).
 
