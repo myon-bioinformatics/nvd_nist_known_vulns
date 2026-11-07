@@ -225,10 +225,17 @@ as well as development. The runtime has no third-party dependencies, and
 not read project metadata; consumers must select Python 3.11+ themselves. This
 policy does not update consumers' vendored files or interpreter settings.
 
-The Node entry uses a pinned shared launcher that still probes for Python 3.9+;
-that discovery threshold is not this tool's support policy. Set
-`NVD_NIST_KNOWN_VULNS_PYTHON` to a Python 3.11+ executable for supported use.
-The launcher and its vendor pin are unchanged.
+On Node 26+, run the tool through the pinned shared launcher directly; there is
+no per-tool `.cjs` wrapper:
+
+```bash
+node vendor/py_launch.cjs --env-var NVD_NIST_KNOWN_VULNS_PYTHON -- nvd_nist_known_vulns.py --help
+```
+
+The launcher still probes for Python 3.9+; that discovery threshold is not this
+tool's support policy. Set `NVD_NIST_KNOWN_VULNS_PYTHON` to a Python 3.11+
+executable for supported use. A Node older than 26 exits 2. The launcher and its
+vendor pin are unchanged.
 
 CI pins setup-uv v10.3.3 by full commit SHA, gets Python from it
 (`actions/setup-python` is not used), and uses the latest uv. Setup actions
