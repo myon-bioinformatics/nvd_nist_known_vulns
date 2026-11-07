@@ -10,25 +10,8 @@ on failure. Success output stays JSONL for every format.
 """
 from __future__ import annotations
 
-import argparse
-import configparser
-from datetime import datetime, timezone
-from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
-import difflib
-from email.utils import parsedate_to_datetime
-from http.client import HTTPException, IncompleteRead
-import json
-import math
-import os
-from pathlib import Path
-import re
-import sys
-import tempfile
-import time
-from typing import Any, Iterable
-from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+import argparse, configparser, difflib, json, math, os, re, sys, tempfile, time
+from datetime import datetime, timezone; from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP; from email.utils import parsedate_to_datetime; from http.client import HTTPException, IncompleteRead; from pathlib import Path; from typing import Any, Iterable; from urllib.error import HTTPError, URLError; from urllib.parse import urlencode; from urllib.request import Request, urlopen
 
 NVD_CVE_API = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 DEFAULT_RESULTS_PER_PAGE = 2000

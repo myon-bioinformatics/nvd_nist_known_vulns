@@ -1,19 +1,8 @@
 """nvd_nist_known_vulns.cjs: Node entry parity with nvd_nist_known_vulns.py through the vendored shared py_launch.cjs."""
 from __future__ import annotations
 
-import hashlib
-import json
-import os
-import selectors
-import signal
-import re
-import shutil
-import subprocess
-import sys
-import tempfile
-import unittest
-from pathlib import Path
-from unittest import mock
+import hashlib, json, os, re, selectors, shutil, signal, subprocess, sys, tempfile, unittest
+from pathlib import Path; from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 TOOL = "nvd_nist_known_vulns"
