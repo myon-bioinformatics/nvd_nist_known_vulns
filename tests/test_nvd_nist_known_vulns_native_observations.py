@@ -1,10 +1,6 @@
 """Downstream integration of the pinned shared pytest adapter."""
-import hashlib
-import json
-import os
+import hashlib, json, os, subprocess, sys
 from pathlib import Path
-import subprocess
-import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 

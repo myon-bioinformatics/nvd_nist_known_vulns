@@ -1,8 +1,6 @@
 """Keep Python setup effective before CI's stdlib checks (stdlib-only tests)."""
+import re, tomllib, unittest
 from pathlib import Path
-import re
-import tomllib
-import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 

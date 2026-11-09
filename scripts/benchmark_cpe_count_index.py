@@ -1,9 +1,4 @@
-import json
-import statistics
-import subprocess
-import sys
-import time
-import types
+import json, statistics, subprocess, sys, time, types
 import nvd_nist_known_vulns as nvd
 
 

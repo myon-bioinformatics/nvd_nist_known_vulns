@@ -1,8 +1,5 @@
 """Filtered query receipts must never certify an unfiltered CPE measurement."""
-import contextlib
-import io
-import json
-import unittest
+import contextlib, io, json, unittest
 from unittest.mock import patch
 
 import nvd_nist_known_vulns as nvd

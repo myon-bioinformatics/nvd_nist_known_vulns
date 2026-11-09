@@ -1,11 +1,6 @@
 """CPE suggestions are spelling aids, never product applicability evidence."""
-import contextlib
-import difflib
-import io
-import json
-import unittest
-from unittest.mock import patch
-from urllib.parse import parse_qs, urlsplit
+import contextlib, difflib, io, json, unittest
+from unittest.mock import patch; from urllib.parse import parse_qs, urlsplit
 
 import nvd_nist_known_vulns as nvd
 
