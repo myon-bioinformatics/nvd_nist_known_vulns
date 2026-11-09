@@ -8,7 +8,7 @@ VENDOR_TOOL_PIN = "9e3da7ae1846e9604ebc24bb5178f7de094a4e77"
 
 def test_public_vendor_ci_locked_without_repository_writes():
     import yaml
-    ci = yaml.load((ROOT / '.github/workflows/python.yml').read_text(encoding='utf-8'), Loader=yaml.BaseLoader)
+    ci = yaml.load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'), Loader=yaml.BaseLoader)
     jobs = ci['jobs']
     resolve = jobs['resolve-vendor']['steps']
     test = jobs['test']['steps']
@@ -37,7 +37,7 @@ def test_public_vendor_ci_locked_without_repository_writes():
     assert ci['permissions'] == {'contents': 'read'}
     for steps in (resolve, test):
         assert all(s['with']['persist-credentials'] == 'false' for s in steps if s.get('uses','').startswith('actions/checkout@'))
-    text = (ROOT / '.github/workflows/python.yml').read_text(encoding='utf-8')
+    text = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
     assert not any(word in text for word in ('VENDOR_UPDATE_TOKEN', 'VENDOR_UPDATES_ENABLED', 'GH_TOKEN', 'git push', 'git commit', 'gh pr', 'continue-on-error', 'vendor-mode', 'vendor-promotion.json'))
     runtime = (ROOT / '.github/workflows/runtime-compatibility.yml').read_text(encoding='utf-8')
     assert 'python -S -m unittest discover -s tests -v' in text

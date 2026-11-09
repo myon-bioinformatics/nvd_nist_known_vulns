@@ -58,7 +58,7 @@ def _parity(root: Path, args: list[str]) -> tuple[tuple[int, str, str], tuple[in
 
 class NodeEntryTests(unittest.TestCase):
     def test_ci_enables_node_parity_in_test_job(self):
-        workflow = (ROOT / ".github/workflows/python.yml").read_text(encoding="utf-8")
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         job = workflow.split("\n  test:\n", 1)[1].split("\n  failure-identity:", 1)[0]
         self.assertIn("actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1", job)
         self.assertIn("node-version: '26'", job)
