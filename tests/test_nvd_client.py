@@ -1,14 +1,5 @@
-import importlib.util
-import io
-import json
-import subprocess
-import sys
-import tempfile
-import unittest
-from email.message import Message
-from pathlib import Path
-from unittest import mock
-from urllib.error import HTTPError
+import importlib.util, io, json, subprocess, sys, tempfile, unittest
+from email.message import Message; from pathlib import Path; from unittest import mock; from urllib.error import HTTPError
 
 ROOT=Path(__file__).resolve().parents[1]
 SPEC=importlib.util.spec_from_file_location("nvd_client",ROOT/"nvd_nist_known_vulns.py")
