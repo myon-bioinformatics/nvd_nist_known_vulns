@@ -805,6 +805,7 @@ def _build_parser() -> _AgentArgumentParser:
             "Blank values are rejected. The value is trimmed and uppercased."
         ),
     )
+    parser.suggest_on_error = True  # 🤔 argparse 3.14+: "maybe you meant" for --format / --cvss-v3-severity; older Pythons ignore it
     return parser
 
 

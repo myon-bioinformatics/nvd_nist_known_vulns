@@ -1,4 +1,4 @@
-"""nvd_nist_known_vulns.cjs: Node entry parity with nvd_nist_known_vulns.py through the vendored shared py_launch.cjs."""
+"""Node entry parity with nvd_nist_known_vulns.py, calling the vendored shared py_launch.cjs directly (no per-tool wrapper)."""
 from __future__ import annotations
 
 import hashlib, json, os, re, selectors, shutil, signal, subprocess, sys, tempfile, unittest
@@ -39,8 +39,14 @@ def _run(argv: list[str], cwd: Path) -> tuple[int, str, str]:
     return p.returncode, p.stdout, p.stderr
 
 
+def _direct(root: Path, *args: str) -> list[str]:
+    """The documented command: node vendor/py_launch.cjs --env-var NVD_NIST_KNOWN_VULNS_PYTHON -- nvd_nist_known_vulns.py ARGS."""
+    return [NODE, str(root / "vendor" / "py_launch.cjs"), "--env-var", ENV_VAR, "--",
+            str(root / f"{TOOL}.py"), *args]
+
+
 def _parity(root: Path, args: list[str]) -> tuple[tuple[int, str, str], tuple[int, str, str]]:
-    via_node = _run([NODE, str(root / f"{TOOL}.cjs"), *args], root)
+    via_node = _run(_direct(root, *args), root)
     via_python = _run([sys.executable, "-S", str(ROOT / f"{TOOL}.py"), *args], root)
     return via_node, via_python
 
@@ -67,11 +73,10 @@ class NodeEntryTests(unittest.TestCase):
         blob = hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
         self.assertEqual(blob, entry["blob_sha"])
 
-    def test_entry_uses_shared_launcher_only(self):
-        text = (ROOT / f"{TOOL}.cjs").read_text(encoding="utf-8")
-        self.assertIn('require("./vendor/py_launch.cjs")', text)
-        self.assertNotIn("child_process", text)
-        self.assertIn(f'"{TOOL}.py"', text)
+    def test_no_per_tool_wrapper_and_readme_documents_the_direct_command(self):
+        self.assertFalse((ROOT / f"{TOOL}.cjs").exists())
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn(f"node vendor/py_launch.cjs --env-var {ENV_VAR} -- {TOOL}.py", readme)
         pkg = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
         self.assertEqual(pkg["engines"]["node"], ">=26")
 
@@ -88,29 +93,10 @@ class NodeEntryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             env = _env()
             env[ENV_VAR] = str(Path(tmp) / "no-such-python")
-            p = subprocess.run([NODE, str(ROOT / f"{TOOL}.cjs"), "--help"], env=env,
+            p = subprocess.run(_direct(ROOT, "--help"), env=env,
                                capture_output=True, text=True, timeout=60)
         self.assertEqual(p.returncode, 2)
         self.assertEqual(p.stdout, "")
-
-    @needs_node
-    def test_mutated_entry_breaks_parity(self):
-        mutations = [
-            (f'"{TOOL}.py"', '"missing_tool.py"'),
-            ("main(PY_SCRIPT, PY_LAUNCH);", "main(PY_SCRIPT, { ...PY_LAUNCH, argv: [] });"),
-            ("noSite: true", "noSite: true, isolated: true, argv: ['--help']"),
-        ]
-        text = (ROOT / f"{TOOL}.cjs").read_text(encoding="utf-8")
-        for old, new in mutations:
-            with self.subTest(old), tempfile.TemporaryDirectory() as tmp:
-                tmp_path = Path(tmp)
-                (tmp_path / "vendor").mkdir()
-                shutil.copy(ROOT / "vendor" / "py_launch.cjs", tmp_path / "vendor" / "py_launch.cjs")
-                shutil.copy(ROOT / f"{TOOL}.py", tmp_path / f"{TOOL}.py")
-                self.assertIn(old, text)
-                (tmp_path / f"{TOOL}.cjs").write_text(text.replace(old, new), encoding="utf-8")
-                self.assertTrue(any(_parity(tmp_path, c["args"])[0] != _parity(ROOT, c["args"])[1]
-                                    for c in CASES))
 
 
 class NodeProbeTests(unittest.TestCase):
@@ -171,7 +157,6 @@ class LauncherRegressionTests(unittest.TestCase):
             root = Path(tmp)
             (root / "vendor").mkdir()
             shutil.copyfile(self.root / "vendor/py_launch.cjs", root / "vendor/py_launch.cjs")
-            shutil.copyfile(self.root / f"{self.tool}.cjs", root / f"{self.tool}.cjs")
             (root / f"{self.tool}.py").write_text(
                 "import signal, time\n"
                 "signal.signal(signal.SIGINT, lambda *_: print('ACK', flush=True))\n"
@@ -181,7 +166,7 @@ class LauncherRegressionTests(unittest.TestCase):
             )
             env = dict(self.env, PY_LAUNCH_ERROR_FORMAT="json" if json_errors else "")
             child = subprocess.Popen(
-                [self.node, str(root / f"{self.tool}.cjs")], env=env,
+                [self.node, str(root / "vendor/py_launch.cjs"), "--env-var", ENV_VAR, "--", str(root / f"{self.tool}.py")], env=env,
                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, start_new_session=True,
             )
@@ -221,7 +206,7 @@ class LauncherRegressionTests(unittest.TestCase):
                 f"from pathlib import Path\nPath({str(marker)!r}).touch()\n", encoding="utf-8",
             )
             result = subprocess.run(
-                [self.node, str(self.root / f"{self.tool}.cjs"), "--help"],
+                [self.node, str(self.root / "vendor/py_launch.cjs"), "--env-var", ENV_VAR, "--", str(self.root / f"{self.tool}.py"), "--help"],
                 env=dict(self.env, PYTHONPATH=str(root)), capture_output=True, timeout=30,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
