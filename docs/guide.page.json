@@ -1,0 +1,110 @@
+{
+  "schema": "web-ui-page/1",
+  "title": "nvd_nist_known_vulns 利用ガイド",
+  "theme": "auto",
+  "description": "CPE 2.3 名から NVD CVE API 2.0 の既知の脆弱性を取得し、JSON Lines で出す単一ファイル。",
+  "icon": "./icon.png",
+  "favicon": "./favicon.png",
+  "blocks": [
+    {
+      "type": "badges",
+      "items": [
+        "📄 単一ファイル",
+        "🧰 標準ライブラリのみ",
+        "🐍 Python 3.11+"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "📥 取得",
+      "blocks": [
+        {
+          "type": "text",
+          "text": "1 ファイルを置くだけで動きます（pip 不要）。"
+        },
+        {
+          "type": "output",
+          "text": "curl -fsSLO https://raw.githubusercontent.com/myon-bioinformatics/nvd_nist_known_vulns/main/nvd_nist_known_vulns.py\ncurl -fsSLO https://raw.githubusercontent.com/myon-bioinformatics/nvd_nist_known_vulns/main/config.ini"
+        }
+      ]
+    },
+    {
+      "type": "section",
+      "title": "▶️ 実行",
+      "blocks": [
+        {
+          "type": "card",
+          "title": "🔎 CPE を指定して取得",
+          "text": "--cpe は繰り返せます。結果は標準出力に JSONL（nvd-cve-summary/1）。",
+          "blocks": [
+            {
+              "type": "output",
+              "text": "$ python nvd_nist_known_vulns.py --cpe \"cpe:2.3:a:openssl:openssl:1.1.1c:*:*:*:*:*:*:*\""
+            }
+          ]
+        },
+        {
+          "type": "card",
+          "title": "📝 config.ini から",
+          "text": "--cpe を省くと config.ini の [cpeName] を読みます。",
+          "blocks": [
+            {
+              "type": "output",
+              "text": "$ python nvd_nist_known_vulns.py --silent --output result.jsonl"
+            }
+          ]
+        },
+        {
+          "type": "card",
+          "title": "🚨 重大度で絞る",
+          "text": "CVSS v3 の重大度（LOW / MEDIUM / HIGH / CRITICAL）で絞ります。",
+          "blocks": [
+            {
+              "type": "output",
+              "text": "$ python nvd_nist_known_vulns.py --cvss-v3-severity CRITICAL"
+            }
+          ]
+        },
+        {
+          "type": "card",
+          "title": "⏱️ 知っておくこと",
+          "text": "API キーなしは 6 秒間隔、NVD_API_KEY があれば 0.6 秒間隔。終了コードは 0 成功 / 1 NVD・出力の失敗 / 2 使い方・入力の誤り。結果が自分の環境に当てはまるかは別途の確認が必要です。",
+          "blocks": []
+        }
+      ]
+    },
+    {
+      "type": "section",
+      "title": "🐍 Python から呼ぶ",
+      "blocks": [
+        {
+          "type": "output",
+          "text": "$ python -c 'import nvd_nist_known_vulns as n; print(n.calculate_cvss_base(\"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H\"))'\n{'version': '3.1', 'base_score': 9.8, 'base_severity': 'CRITICAL'}"
+        }
+      ]
+    },
+    {
+      "type": "section",
+      "title": "🔗 リンク",
+      "blocks": [
+        {
+          "type": "links",
+          "items": [
+            {
+              "label": "📦 リポジトリ",
+              "href": "https://github.com/myon-bioinformatics/nvd_nist_known_vulns"
+            },
+            {
+              "label": "📖 README",
+              "href": "https://github.com/myon-bioinformatics/nvd_nist_known_vulns#readme"
+            },
+            {
+              "label": "📄 nvd_nist_known_vulns.py",
+              "href": "https://github.com/myon-bioinformatics/nvd_nist_known_vulns/blob/main/nvd_nist_known_vulns.py"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

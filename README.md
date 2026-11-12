@@ -1,5 +1,7 @@
 # NVD NIST known vulnerabilities
 
+📘 [利用ガイド / Usage guide](https://myon-bioinformatics.github.io/nvd_nist_known_vulns/) (GitHub Pages)
+
 <p align="center">
   <img src="docs/brand/icon.png" alt="nvd_nist_known_vulns icon" width="160" />
 </p>
