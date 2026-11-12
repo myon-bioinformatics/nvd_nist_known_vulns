@@ -24,7 +24,7 @@
         },
         {
           "type": "output",
-          "text": "curl -fsSLO https://raw.githubusercontent.com/myon-bioinformatics/nvd_nist_known_vulns/main/nvd_nist_known_vulns.py"
+          "text": "curl -fsSLO https://raw.githubusercontent.com/myon-bioinformatics/nvd_nist_known_vulns/main/nvd_nist_known_vulns.py\ncurl -fsSLO https://raw.githubusercontent.com/myon-bioinformatics/nvd_nist_known_vulns/main/config.ini"
         }
       ]
     },
