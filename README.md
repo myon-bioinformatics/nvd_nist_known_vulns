@@ -62,6 +62,13 @@ python nvd_nist_known_vulns.py --help
 
 `--help` documents every flag: `--silent`, `--config`, `--cpe`, `--output`, `--timeout`, `--format`, `--cvss-v3-severity`, and `--cvss-v3-metrics`.
 
+Sample output (illustrative values, not a live NVD snapshot):
+
+```jsonl
+{"cwe": ["CWE-502"], "cvss_v2": null, "cvss_v3": {"base_score": 9.8, "base_severity": "CRITICAL", "calculated_base_score": 9.8, "calculated_base_severity": "CRITICAL", "source": "nvd@nist.gov", "type": "Primary", "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", "version": "3.1"}, "cvss_v4": null, "description": "Example normalized record; values are illustrative, not a live NVD snapshot.", "id": "CVE-EXAMPLE-0001", "kind": "cve", "last_modified": null, "published": null, "query": {"cpe_name": "cpe:2.3:a:example:example:1:*:*:*:*:*:*:*"}, "schema": "nvd-cve-summary/1", "source_identifier": "example"}
+{"cve_count": 1, "kind": "query_complete", "query": {"cpe_name": "cpe:2.3:a:example:example:1:*:*:*:*:*:*:*"}, "schema": "nvd-cve-summary/1"}
+```
+
 ## CLI exit codes
 
 | Code | Meaning |
@@ -149,8 +156,10 @@ python -S -m unittest discover -s tests -v
 ```
 
 Tests are offline and do not consume NVD rate limits.
+`tests/test_nvd_nist_known_vulns.py` holds the behaviour tests (stdlib only);
+`tests/test_fleet.py` holds the repository and CI contracts (vendor lock, workflows, xprobe adapter, Node parity).
 
-Test-only tools come from the `dev` dependency group, so `uv run pytest` installs them; `tests/requirements.txt` is for pip inside an active virtual environment.
+Test-only tools come from the `dev` dependency group, so `uv run pytest` installs them.
 The locked pytest lane runs with `uv run --locked pytest`. Pytest's
 `pythonpath` includes the repository root so that entry point can import this
 flat module. The `python -S` unittest runtime lane stays free of pytest and
@@ -217,13 +226,13 @@ package. Development/test environments use Python 3.11+ and a committed uv lock:
 ```sh
 uv sync --locked --python 3.11
 uv run --locked pytest
-python -S -m unittest discover -s tests -p test_nvd_client.py -v
+python -S -m unittest discover -s tests -p test_nvd_nist_known_vulns.py -v
 ```
 
 `pyproject.toml` is the canonical Python requirement and development dependency
 definition: `project.requires-python = ">=3.11"` applies to source runtime support
 as well as development. The runtime has no third-party dependencies, and
-`tests/requirements.txt` lists only the test-only tools. A copied `.py` file does
+the `dev` dependency group in `pyproject.toml` lists the test-only tools. A copied `.py` file does
 not read project metadata; consumers must select Python 3.11+ themselves. This
 policy does not update consumers' vendored files or interpreter settings.
 

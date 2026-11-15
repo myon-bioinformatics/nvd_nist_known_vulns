@@ -34,7 +34,7 @@ jobs:
           save-cache: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           prune-cache: true
       - name: Exercise runtime behavior without site-packages
-        run: python -S -m unittest discover -s tests -p test_nvd_client.py -v
+        run: python -S -m unittest discover -s tests -p test_nvd_nist_known_vulns.py -v
 
   portability:
     name: Locked development (${{ matrix.os }})
