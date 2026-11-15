@@ -16,7 +16,6 @@ on:
       - "docs/guide.page.json"
       - "docs/brand/**"
       - ".github/workflows/pages.yml"
-  workflow_dispatch:
 
 permissions:
   contents: read
