@@ -1,16 +1,41 @@
-import importlib.util, io, json, subprocess, sys, tempfile, unittest
-from email.message import Message; from pathlib import Path; from unittest import mock; from urllib.error import HTTPError
+"""🧱 nvd_nist_known_vulns behaviour: offline, stdlib only.
 
-ROOT=Path(__file__).resolve().parents[1]
-SPEC=importlib.util.spec_from_file_location("nvd_client",ROOT/"nvd_nist_known_vulns.py")
-nvd=importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(nvd)
+CI's runtime-compatibility lane runs this file with `python -S -m unittest` on every runner OS;
+pytest also collects the plain function at the end.
+
+- client and CLI: CVSS, NVD requests and retries, pagination, JSONL consumer, process exit codes
+- CPE helpers: suggestions are spelling aids, never product applicability evidence
+- query scope: filtered query receipts must never certify an unfiltered CPE measurement
+- CPE count index: CVE IDs are grouped once per requested CPE
+"""
+import contextlib, difflib, io, json, subprocess, sys, tempfile, unittest
+from email.message import Message
+from pathlib import Path
+from unittest import mock
+from urllib.error import HTTPError
+from urllib.parse import parse_qs, urlsplit
+
+import nvd_nist_known_vulns as nvd
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+# ── client and CLI ────────────────────────────────────────────────────────────────────────────────
+
+
+def summary(description=None):
+    """A normalized CVE record as fetch_cves returns it (all optional fields empty)."""
+    return {"id": "CVE-T", "description": description, "cwe": [], "cvss_v4": None, "cvss_v3": None,
+            "cvss_v2": None, "published": None, "last_modified": None, "source_identifier": None}
+
 
 def response(payload):
     raw=io.BytesIO(json.dumps(payload).encode())
     raw.__enter__=lambda s:s; raw.__exit__=lambda *a:None
     return raw
 
-class Tests(unittest.TestCase):
+
+class NvdClientTests(unittest.TestCase):
     def setUp(self): nvd._last_request_at=None
 
     def test_format_handles_optional_fields_and_cvss30(self):
@@ -149,7 +174,7 @@ class Tests(unittest.TestCase):
     def test_failed_cpe_does_not_emit_completion(self):
         with tempfile.TemporaryDirectory() as d:
             cfg=Path(d)/"c.ini"; cfg.write_text("[cpeName]\na=cpe:ok\nb=cpe:failed\n",encoding="utf-8")
-            ok={"id":"CVE-T","description":None,"cwe":[],"cvss_v4":None,"cvss_v3":None,"cvss_v2":None,"published":None,"last_modified":None,"source_identifier":None}
+            ok=summary()
             stdout=io.StringIO()
             with mock.patch.object(nvd,"fetch_cves",side_effect=[[ok],RuntimeError("boom")]), mock.patch("sys.stdout",stdout):
                 self.assertEqual(nvd.main(["--silent","--config",str(cfg)]),1)
@@ -269,7 +294,7 @@ class Tests(unittest.TestCase):
             self.assertTrue(nvd._request_json("https://example.invalid")["ok"])
 
     def test_main_jsonl_and_exit_code(self):
-        record={"id":"CVE-T","description":"日本語","cwe":[],"cvss_v4":None,"cvss_v3":None,"cvss_v2":None,"published":None,"last_modified":None,"source_identifier":None}
+        record=summary("日本語")
         with tempfile.TemporaryDirectory() as d:
             cfg=Path(d)/"c.ini"; cfg.write_text("[cpeName]\na=cpe:test\n",encoding="utf-8")
             out=Path(d)/"out.jsonl"
@@ -310,7 +335,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(nvd._retry_delay("3600",0),60.0)
 
     def test_cli_cpe_options(self):
-        record={"id":"CVE-T","description":"test","cwe":[],"cvss_v4":None,"cvss_v3":None,"cvss_v2":None,"published":None,"last_modified":None,"source_identifier":None}
+        record=summary("test")
         with tempfile.TemporaryDirectory() as d:
             out=Path(d)/"out.jsonl"
             with mock.patch.object(nvd,"fetch_cves",return_value=[record]) as fetch:
@@ -341,44 +366,6 @@ class Tests(unittest.TestCase):
         with mock.patch("sys.stderr",stderr):
             self.assertEqual(nvd.main(["--silent","--config","nonexistent.ini"]),2)
         self.assertIn("error:", stderr.getvalue())
-
-    def test_parse_cpe_name_valid(self):
-        cpe = r"cpe:2.3:a:openssl:openssl\,lib:1.1.1c:*:*:*:*:*:*:*"
-        parsed = nvd.parse_cpe_name(cpe)
-        self.assertEqual(parsed["part"], "a")
-        self.assertEqual(parsed["part_type"], "application")
-        self.assertEqual(parsed["vendor"], "openssl")
-        self.assertEqual(parsed["product"], "openssl,lib")
-        self.assertEqual(parsed["version"], "1.1.1c")
-        self.assertEqual(parsed["update"], "*")
-
-    def test_parse_cpe_name_invalid(self):
-        invalid_cpes = [
-            "cpe:2.2:a:openssl:openssl:1.1.1c",
-            "not_a_cpe",
-            "cpe:2.3:a:openssl",
-            123,
-        ]
-        for invalid in invalid_cpes:
-            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
-                nvd.parse_cpe_name(invalid)
-
-    def test_suggest_cpe_names(self):
-        candidates = [
-            "cpe:2.3:a:openssl:openssl:1.1.1c:*:*:*:*:*:*:*",
-            "cpe:2.3:a:openssl:openssl:1.1.1d:*:*:*:*:*:*:*",
-            "cpe:2.3:a:apache:log4j:1.2:-:*:*:*:*:*:*",
-        ]
-        matches = nvd.suggest_cpe_names(
-            "cpe:2.3:a:openssl:openssl:1.1.1a:*:*:*:*:*:*:*",
-            candidates,
-            cutoff=0.8,
-        )
-        self.assertIn("cpe:2.3:a:openssl:openssl:1.1.1c:*:*:*:*:*:*:*", matches)
-        self.assertNotIn("cpe:2.3:a:apache:log4j:1.2:-:*:*:*:*:*:*", matches)
-
-        with self.assertRaises(ValueError):
-            nvd.suggest_cpe_names(None, candidates)
 
 
 def _run_cli(args, cwd):
@@ -523,11 +510,7 @@ class CliProcessTests(unittest.TestCase):
 
 class CliFormatTests(unittest.TestCase):
     def test_json_success_keeps_jsonl_and_skips_progress(self):
-        record = {
-            "id": "CVE-T", "description": "test", "cwe": [], "cvss_v4": None,
-            "cvss_v3": None, "cvss_v2": None, "published": None,
-            "last_modified": None, "source_identifier": None,
-        }
+        record = summary("test")
         stderr = io.StringIO()
         stdout = io.StringIO()
         with mock.patch.object(nvd, "fetch_cves", return_value=[record]) as fetch, \
@@ -563,9 +546,7 @@ class CliFormatTests(unittest.TestCase):
         })
 
     def test_json_failure_after_partial_stdout_stays_on_stderr(self):
-        ok = {"id": "CVE-T", "description": None, "cwe": [], "cvss_v4": None,
-              "cvss_v3": None, "cvss_v2": None, "published": None,
-              "last_modified": None, "source_identifier": None}
+        ok = summary()
         stdout = io.StringIO()
         stderr = io.StringIO()
         with mock.patch.object(nvd, "fetch_cves", side_effect=[[ok], RuntimeError("boom")]), \
@@ -592,4 +573,280 @@ class CliFormatTests(unittest.TestCase):
         self.assertIn("error:", stderr.getvalue())
 
 
-if __name__=="__main__": unittest.main()
+# ── CPE helpers ───────────────────────────────────────────────────────────────────────────────────
+
+
+def cpe(**fields):
+    attrs = dict(part="a", vendor="vendoralpha", product="widget",
+                 version="1.0", update="*", edition="*", language="*",
+                 sw_edition="*", target_sw="*", target_hw="*", other="*")
+    attrs.update(fields)
+    return "cpe:2.3:" + ":".join(attrs.values())
+
+
+class CpeHelperTests(unittest.TestCase):
+    def test_all_attributes_and_logical_part_types(self):
+        name = cpe(part="o", update="sp1", edition="enterprise", language="en-US",
+                   sw_edition="desktop", target_sw="linux", target_hw="x64", other="extra")
+        parsed = nvd.parse_cpe_name(name)
+        self.assertEqual(parsed["part_type"], "operating_system")
+        self.assertEqual(list(parsed["raw_attributes"].values()), name.split(":")[2:])
+        for key, raw in parsed["raw_attributes"].items():
+            self.assertEqual(parsed[key], raw)
+        for part, kind in (("a", "application"), ("h", "hardware"),
+                           ("A", "application"), ("*", "unknown"), ("-", "unknown")):
+            with self.subTest(part=part):
+                self.assertEqual(nvd.parse_cpe_name(cpe(part=part))["part_type"], kind)
+
+    def test_escaped_delimiters_and_backslash_parity(self):
+        for raw, display in ((r"one\:two", "one:two"), (r"one\,two", "one,two"),
+                             (r"one\\", "one\\"), (r"one\\\:two", "one\\:two"),
+                             (r"\*", "*"), (r"\?", "?")):
+            with self.subTest(raw=raw):
+                parsed = nvd.parse_cpe_name(cpe(product=raw))
+                self.assertEqual(parsed["product"], display)
+                self.assertEqual(parsed["raw_attributes"]["product"], raw)
+                self.assertEqual(parsed["version"], "1.0")
+
+    def test_every_permitted_quoted_punctuation(self):
+        # NISTIR 7695 Figure 6-3, independent explicit alphabet.
+        for char in '\\*?!"#$%&\'()+,/:;<=>@[]^`{|}~':
+            with self.subTest(char=char):
+                self.assertEqual(nvd.parse_cpe_name(cpe(product="\\" + char))["product"], char)
+
+    def test_logical_and_literal_values_are_distinguishable(self):
+        for key in ("vendor", "product", "version", "update", "edition", "other"):
+            any_value = nvd.parse_cpe_name(cpe(**{key: "*"}))
+            literal = nvd.parse_cpe_name(cpe(**{key: r"\*"}))
+            na = nvd.parse_cpe_name(cpe(**{key: "-"}))
+            with self.subTest(key=key):
+                self.assertEqual(any_value[key], literal[key])  # display only
+                self.assertNotEqual(any_value["raw_attributes"][key], literal["raw_attributes"][key])
+                self.assertEqual(na["raw_attributes"][key], "-")
+
+    def test_valid_wildcard_positions_and_language(self):
+        for value in ("*", "-", "*foo", "foo*", "*foo*", "??foo?", "?foo??",
+                      r"foo\*bar", r"foo\?bar", "1.*", "a-b_c.d"):
+            with self.subTest(value=value):
+                self.assertEqual(nvd.parse_cpe_name(cpe(version=value))["raw_attributes"]["version"], value)
+        for language in ("en", "eng", "ja-JP", "es-419", "*", "-"):
+            with self.subTest(language=language):
+                self.assertEqual(nvd.parse_cpe_name(cpe(language=language))["language"], language)
+
+    def test_invalid_structure_and_types(self):
+        for value in (None, 123, [], {}, b"cpe:2.3:", "", "not_a_cpe",
+                      cpe().replace("2.3", "2.2"), cpe().replace("cpe:2.3:", "cpe:/"),
+                      cpe() + ":*", cpe().rsplit(":", 1)[0], cpe(other="abc\\")):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                nvd.parse_cpe_name(value)
+
+    def test_invalid_attributes_escapes_and_wildcards(self):
+        for key in ("vendor", "product", "version", "update", "edition", "sw_edition",
+                    "target_sw", "target_hw", "other"):
+            for value in ("", "two words", "x\ny", "x\ty", "x\x00y", "製品",
+                          r"foo\a", r"foo\.", r"foo\-", r"foo\_", "foo,bar",
+                          "foo*bar", "foo?bar", "**foo", "foo?*", "*?foo", "??"):
+                with self.subTest(key=key, value=value), self.assertRaises(ValueError):
+                    nvd.parse_cpe_name(cpe(**{key: value}))
+        for key, values in (("part", ("", "x", "application", r"\a")),
+                            ("language", ("", "english", "e", "en_US", "en-*", "en-US-extra"))):
+            for value in values:
+                with self.subTest(key=key, value=value), self.assertRaises(ValueError):
+                    nvd.parse_cpe_name(cpe(**{key: value}))
+
+    def test_other_vendor_product_version_can_still_be_suggestions(self):
+        target = cpe()
+        for candidate in (cpe(vendor="vendoromega"), cpe(product="widgets"),
+                          cpe(version="2.0"), cpe(part="o")):
+            with self.subTest(candidate=candidate):
+                self.assertGreater(difflib.SequenceMatcher(None, target, candidate).ratio(), .8)
+                self.assertEqual(nvd.suggest_cpe_names(target, [candidate], cutoff=.8), [candidate])
+        # Raising cutoff to 1 requires identical spelling; it proves no CVE applicability.
+        self.assertEqual(nvd.suggest_cpe_names(target, [cpe(version="2.0"), target], cutoff=1), [target])
+
+    def test_suggestions_keep_original_escaping_and_do_not_expand_wildcards(self):
+        names = [cpe(product=r"foo\:bar", version=v) for v in ("*", "1.0", r"\*")]
+        self.assertEqual(nvd.suggest_cpe_names(names[0], names, cutoff=1), [names[0]])
+        self.assertEqual(set(nvd.suggest_cpe_names(names[0], names, cutoff=0)), set(names))
+
+    def test_suggestions_deduplicate_validate_and_support_generators(self):
+        target = cpe()
+        candidates = [target, target, None, 17, {}, "invalid", cpe(product=""), cpe(version="2")]
+        original = list(candidates)
+        self.assertEqual(nvd.suggest_cpe_names(target, iter(candidates), n=1), [target])
+        matches = nvd.suggest_cpe_names(target, candidates, n=8, cutoff=0)
+        self.assertEqual(matches, [target, cpe(version="2")])
+        self.assertEqual(candidates, original)
+        self.assertEqual(nvd.suggest_cpe_names(target, []), [])
+
+    def test_invalid_suggestion_arguments_even_with_empty_candidates(self):
+        for target in (None, "typo", cpe(product=""), cpe(other="bad\\")):
+            with self.subTest(target=target), self.assertRaises(ValueError):
+                nvd.suggest_cpe_names(target, [])
+        for n in (0, -1, 1.5, True, "3", None):
+            with self.subTest(n=n), self.assertRaises(ValueError):
+                nvd.suggest_cpe_names(cpe(), [], n=n)
+        for cutoff in (-.1, 1.1, float("nan"), float("inf"), True, ".8", None):
+            with self.subTest(cutoff=cutoff), self.assertRaises(ValueError):
+                nvd.suggest_cpe_names(cpe(), [], cutoff=cutoff)
+
+    def test_helpers_are_offline(self):
+        with mock.patch.object(nvd, "urlopen", side_effect=AssertionError("network")):
+            self.assertEqual(nvd.suggest_cpe_names(cpe(), [cpe()]), [cpe()])
+
+    def test_similar_cpe_does_not_supply_completion_or_cves(self):
+        target, other = cpe(), cpe(vendor="vendoromega")
+        records = nvd.parse_jsonl(nvd._record(other, {"id": "CVE-2026-0001"}) + "\n" +
+                                  nvd._completion_record(other, 1))
+        before = json.dumps(records, sort_keys=True)
+        self.assertEqual(nvd.suggest_cpe_names(target, [other], cutoff=.8), [other])
+        self.assertEqual(nvd.select_cpe_records(records, [target]), {
+            "status": "not_measured", "reason": "missing_query_completion",
+            "cpe_names": [target], "missing_cpe_names": [target]})
+        records.append(json.loads(nvd._completion_record(target, 0)))
+        self.assertEqual(nvd.select_cpe_records(records, [target]), {
+            "status": "measured", "cpe_names": [target], "cve_count": 0, "cve_ids": []})
+        self.assertEqual(json.dumps(records[:-1], sort_keys=True), before)
+
+    def test_cli_fetch_and_jsonl_use_only_explicit_cpe(self):
+        target = cpe(product=r"widget\,lib")
+        fixture = {"vulnerabilities": [{"cve": {"id": "CVE-2026-0001",
+                    "descriptions": [{"lang": "en", "value": "description 日本語"}]}}]}
+        page = dict(fixture, startIndex=0, resultsPerPage=2000, totalResults=1)
+        output = io.StringIO()
+        with mock.patch.object(nvd, "parse_cpe_name", side_effect=AssertionError("parser used in query")), \
+             mock.patch.object(nvd, "suggest_cpe_names", side_effect=AssertionError("fuzzy query")), \
+             mock.patch.object(nvd, "_request_json", return_value=page) as request, \
+             contextlib.redirect_stdout(output):
+            self.assertEqual(nvd.main(["--silent", "--cpe", target]), 0)
+        self.assertEqual(request.call_count, 1)
+        self.assertEqual(parse_qs(urlsplit(request.call_args.args[0]).query)["cpeName"], [target])
+        expected_record = {"id": "CVE-2026-0001", "description": "description 日本語",
+                           "cwe": [], "cvss_v4": None, "cvss_v3": None, "cvss_v2": None,
+                           "published": None, "last_modified": None, "source_identifier": None,
+                           "schema": "nvd-cve-summary/1", "kind": "cve", "query": {"cpe_name": target}}
+        expected_complete = {"schema": "nvd-cve-summary/1", "kind": "query_complete",
+                             "query": {"cpe_name": target}, "cve_count": 1}
+        expected = "".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n"
+                           for row in (expected_record, expected_complete))
+        self.assertEqual(output.getvalue(), expected)
+        self.assertEqual(nvd.select_cpe_records(nvd.parse_jsonl(output.getvalue()), [target])["cve_ids"],
+                         ["CVE-2026-0001"])
+
+    def test_parse_cpe_name_valid(self):
+        cpe = r"cpe:2.3:a:openssl:openssl\,lib:1.1.1c:*:*:*:*:*:*:*"
+        parsed = nvd.parse_cpe_name(cpe)
+        self.assertEqual(parsed["part"], "a")
+        self.assertEqual(parsed["part_type"], "application")
+        self.assertEqual(parsed["vendor"], "openssl")
+        self.assertEqual(parsed["product"], "openssl,lib")
+        self.assertEqual(parsed["version"], "1.1.1c")
+        self.assertEqual(parsed["update"], "*")
+
+    def test_parse_cpe_name_invalid(self):
+        invalid_cpes = [
+            "cpe:2.2:a:openssl:openssl:1.1.1c",
+            "not_a_cpe",
+            "cpe:2.3:a:openssl",
+            123,
+        ]
+        for invalid in invalid_cpes:
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                nvd.parse_cpe_name(invalid)
+
+    def test_suggest_cpe_names(self):
+        candidates = [
+            "cpe:2.3:a:openssl:openssl:1.1.1c:*:*:*:*:*:*:*",
+            "cpe:2.3:a:openssl:openssl:1.1.1d:*:*:*:*:*:*:*",
+            "cpe:2.3:a:apache:log4j:1.2:-:*:*:*:*:*:*",
+        ]
+        matches = nvd.suggest_cpe_names(
+            "cpe:2.3:a:openssl:openssl:1.1.1a:*:*:*:*:*:*:*",
+            candidates,
+            cutoff=0.8,
+        )
+        self.assertIn("cpe:2.3:a:openssl:openssl:1.1.1c:*:*:*:*:*:*:*", matches)
+        self.assertNotIn("cpe:2.3:a:apache:log4j:1.2:-:*:*:*:*:*:*", matches)
+
+        with self.assertRaises(ValueError):
+            nvd.suggest_cpe_names(None, candidates)
+
+
+# ── query scope ───────────────────────────────────────────────────────────────────────────────────
+
+
+CPE = 'cpe:2.3:a:example:app:1:*:*:*:*:*:*:*'
+
+
+class QueryScopeTests(unittest.TestCase):
+    def emit(self, flags, records):
+        output = io.StringIO()
+        with mock.patch.object(nvd, 'read_ini', return_value=[CPE]), mock.patch.object(nvd, 'fetch_cves', return_value=records) as fetch, contextlib.redirect_stdout(output):
+            self.assertEqual(nvd.main(['--silent', *flags]), 0)
+        return output.getvalue(), fetch.call_args.kwargs
+
+    def test_filtered_zero_is_not_unfiltered_zero(self):
+        plain, _ = self.emit([], [])
+        filtered, _ = self.emit(['--cvss-v3-severity', 'CRITICAL'], [])
+        self.assertNotEqual(plain, filtered)
+        self.assertEqual(json.loads(filtered)['kind'], 'filtered_query_complete')
+        self.assertEqual(json.loads(filtered)['query']['filters'], {'cvss_v3_severity': 'CRITICAL'})
+        self.assertEqual(nvd.select_cpe_records(nvd.parse_jsonl(plain), [CPE])['status'], 'measured')
+        self.assertEqual(nvd.select_cpe_records(nvd.parse_jsonl(filtered), [CPE])['status'], 'not_measured')
+        # Existing v1 readers ignore these additive kinds, rather than seeing completion.
+        self.assertNotIn(json.loads(filtered)['kind'], ('cve', 'query_complete'))
+
+    def test_filters_bind_both_records_and_request(self):
+        for flags in (['--cvss-v3-severity', 'HIGH'], ['--cvss-v3-metrics', ' av:n/ac:l '], ['--cvss-v3-severity', 'CRITICAL', '--cvss-v3-metrics', 'AV:N']):
+            with self.subTest(flags=flags):
+                text, request = self.emit(flags, [{'id': 'CVE-2026-0001'}])
+                rows = nvd.parse_jsonl(text)
+                self.assertEqual({r['kind'] for r in rows}, {'filtered_cve', 'filtered_query_complete'})
+                self.assertEqual(rows[0]['query'], rows[1]['query'])
+                filters = rows[0]['query']['filters']
+                self.assertEqual(filters, {k: request[k] for k in ('cvss_v3_severity', 'cvss_v3_metrics') if request[k] is not None})
+                self.assertEqual(nvd.select_cpe_records(rows, [CPE])['status'], 'not_measured')
+
+    def test_mixed_snapshots_do_not_mix_counts_or_ids(self):
+        plain, _ = self.emit([], [{'id': 'CVE-2026-0001'}])
+        filtered, _ = self.emit(['--cvss-v3-severity', 'CRITICAL'], [{'id': 'CVE-2026-9999'}])
+        result = nvd.select_cpe_records(nvd.parse_jsonl(plain + filtered), [CPE])
+        self.assertEqual(result['status'], 'measured')
+        self.assertEqual(result['cve_ids'], ['CVE-2026-0001'])
+
+    def test_ambiguous_scope_is_rejected_or_not_measured(self):
+        original = json.loads(nvd._completion_record(CPE, 0))
+        for filters in ({'cvss_v3_severity': 'CRITICAL'}, {}, {'unknown': 'value'}):
+            with self.subTest(filters=filters):
+                row = dict(original, query={'cpe_name': CPE, 'filters': filters})
+                with self.assertRaises(ValueError):
+                    nvd.parse_jsonl(json.dumps(row))
+                self.assertEqual(nvd.select_cpe_records([row], [CPE])['status'], 'not_measured')
+        for query in ({'cpe_name': CPE}, {'cpe_name': CPE, 'filters': {'cvss_v3_severity': None}}, {'cpe_name': CPE, 'filters': {'cvss_v3_severity': 'critical'}}):
+            with self.subTest(query=query), self.assertRaises(ValueError):
+                nvd.parse_jsonl(json.dumps(dict(original, kind='filtered_query_complete', query=query)))
+
+    def test_invalid_empty_filter_does_not_emit_completion(self):
+        output = io.StringIO()
+        with mock.patch.object(nvd, 'fetch_cves') as fetch, contextlib.redirect_stdout(output), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(nvd.main(['--cvss-v3-metrics', '  ']), nvd.EXIT_USAGE)
+        fetch.assert_not_called()
+        self.assertEqual(output.getvalue(), '')
+
+
+# ── CPE count index (pytest only) ─────────────────────────────────────────────────────────────────
+
+
+def test_multiple_cpes_deduplicate_shared_ids_and_check_each_count():
+    names=['cpe:2.3:a:example:a:1:*:*:*:*:*:*:*','cpe:2.3:a:example:b:1:*:*:*:*:*:*:*']
+    rows=[]
+    for name in names:
+        rows += [{'kind':'cve','query':{'cpe_name':name},'id':ident} for ident in ('CVE-1','CVE-1','CVE-2')]
+        rows.append({'kind':'query_complete','query':{'cpe_name':name},'cve_count':2})
+    assert nvd.select_cpe_records(iter(rows),names)['cve_ids']==['CVE-1','CVE-2']
+    rows[-1]['cve_count']=3
+    assert nvd.select_cpe_records(rows,names)['mismatched_cpe_names']==[names[-1]]
+
+
+if __name__ == "__main__":
+    unittest.main()

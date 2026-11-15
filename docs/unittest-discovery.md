@@ -7,20 +7,22 @@ and its usual site-packages path additions; it is not a complete isolation bound
 
 The runtime and uv/pytest development environment share the Python 3.11+ floor
 declared in `pyproject.toml`. The runtime remains independent of the development
-dependencies. The validation below covers CPython 3.12.14, not every supported
+dependencies. The validation below covers CPython 3.13.18, not every supported
 Python version.
 
 ```sh
-python -S -m unittest discover -s tests -p test_nvd_client.py -v
+python -S -m unittest discover -s tests -p test_nvd_nist_known_vulns.py -v
 ```
 
-Validated on Linux / CPython 3.12.14: **45 tests, exit 0** (2026-11-03).
+Validated on Linux / CPython 3.13.18: **64 tests, exit 0** (2026-11-15). The file holds every
+offline behaviour test (client and CLI, CPE helpers, query scope); its one plain pytest function is
+not collected here.
 
 To narrow the first command to a test name, use the built-in `-k` filter
 (available since Python 3.7, including all versions supported here):
 
 ```sh
-python -S -m unittest discover -s tests -p test_nvd_client.py -v -k test_format_handles_optional_fields_and_cvss30
+python -S -m unittest discover -s tests -p test_nvd_nist_known_vulns.py -v -k test_format_handles_optional_fields_and_cvss30
 ```
 
 `-s` is the discovery start directory, `-p` matches test filenames, `-k`
