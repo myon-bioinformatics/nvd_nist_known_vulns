@@ -159,7 +159,7 @@ Tests are offline and do not consume NVD rate limits.
 `tests/test_nvd_nist_known_vulns.py` holds the behaviour tests (stdlib only);
 `tests/test_fleet.py` holds the repository and CI contracts (vendor lock, workflows, xprobe adapter, Node parity).
 
-Test-only tools come from the `dev` dependency group, so `uv run pytest` installs them; `tests/requirements.txt` is for pip inside an active virtual environment.
+Test-only tools come from the `dev` dependency group, so `uv run pytest` installs them.
 The locked pytest lane runs with `uv run --locked pytest`. Pytest's
 `pythonpath` includes the repository root so that entry point can import this
 flat module. The `python -S` unittest runtime lane stays free of pytest and
@@ -232,7 +232,7 @@ python -S -m unittest discover -s tests -p test_nvd_nist_known_vulns.py -v
 `pyproject.toml` is the canonical Python requirement and development dependency
 definition: `project.requires-python = ">=3.11"` applies to source runtime support
 as well as development. The runtime has no third-party dependencies, and
-`tests/requirements.txt` lists only the test-only tools. A copied `.py` file does
+the `dev` dependency group in `pyproject.toml` lists the test-only tools. A copied `.py` file does
 not read project metadata; consumers must select Python 3.11+ themselves. This
 policy does not update consumers' vendored files or interpreter settings.
 
