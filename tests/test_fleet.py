@@ -51,6 +51,7 @@ class FleetTests(unittest.TestCase):
 
     def test_parent_workflow_references_use_reviewed_rollout_commit(self):
         self.assertEqual(set(fleet.parent_refs(ROOT)), {PARENT_WORKFLOW_PIN})
+        fleet.check_actions(ROOT)  # every other action: full SHA with its version comment
 
     def test_project_and_lock_declare_python311_without_runtime_dependencies(self):
         self.assertEqual(fleet.python_floor(ROOT)[0], "3.11")  # pyproject == uv.lock, runtime matrix starts there
@@ -60,11 +61,8 @@ class FleetTests(unittest.TestCase):
         self.assertEqual(project["tool"]["uv"]["dependency-groups"]["dev"]["requires-python"], ">=3.11")
 
     def test_ci_sets_up_python_and_node_before_tests(self):
-        job = fleet.workflow_job(ROOT, "test", setup="astral-sh/setup-uv@",
-                                 inputs=('python-version: "${{ matrix.python-version }}"', "activate-environment: true"))
-        self.assertIn("actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1", job)
-        self.assertIn("node-version: '26'", job)
-        self.assertIn("Require supported Node in parity CI", job)
+        fleet.workflow_job(ROOT, "test", node_floor=26, setup="astral-sh/setup-uv@",
+                           inputs=('python-version: "${{ matrix.python-version }}"', "activate-environment: true"))
 
     def test_benchmark_parity_in_both_interpreter_modes(self):
         reference = "mock.patch.object(g['subprocess'], 'check_output', return_value=open(%r, 'rb').read()).start()\n" % str(ROOT / TOOL)
