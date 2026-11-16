@@ -61,7 +61,8 @@ class FleetTests(unittest.TestCase):
         self.assertEqual(project["tool"]["uv"]["dependency-groups"]["dev"]["requires-python"], ">=3.11")
 
     def test_ci_sets_up_python_and_node_before_tests(self):
-        fleet.workflow_job(ROOT, "test", node_floor=26, setup="astral-sh/setup-uv@",
+        # The guard is run in bash; on Windows a bare "bash" is the WSL launcher, so that lane checks the setup only.
+        fleet.workflow_job(ROOT, "test", node_floor=None if os.name == "nt" else 26, setup="astral-sh/setup-uv@",
                            inputs=('python-version: "${{ matrix.python-version }}"', "activate-environment: true"))
 
     def test_benchmark_parity_in_both_interpreter_modes(self):
