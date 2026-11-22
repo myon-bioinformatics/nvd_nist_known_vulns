@@ -1,3 +1,4 @@
+"""Benchmark select_cpe_records against the baseline commit: same result, median ns for 100 CPEs x 100 CVEs (JSON)."""
 import json, statistics, subprocess, sys, time, types
 import nvd_nist_known_vulns as nvd
 

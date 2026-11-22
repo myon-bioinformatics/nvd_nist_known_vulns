@@ -30,7 +30,7 @@ SOURCES = {
 # the xprobe adapter and its licence stay on one commit.
 ACCEPTED = {
     "vendor/py_launch.cjs": "384f5dd532076062f7833038764e9a62322c387c",
-    "vendor/fleet_check.py": "81f6aea6231d4490e581443fdeb43a09e6018ff0",
+    "vendor/fleet_check.py": "64db25eb0fd9025dbe3cbcbced8b88a39ecb9266",
     "vendor/xprobe_pytest.py": "326acd667e13b21bf53ccc1590af960edf8cbf6c",
     "vendor/xprobe-LICENSE": "326acd667e13b21bf53ccc1590af960edf8cbf6c",
 }
@@ -223,3 +223,11 @@ def test_cleanup(resource):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# 🧰 Scripts: 📝 each one describes itself and ⌨️ one that reads sys.argv declares its arguments (argparse /
+# cli_args). Read with ast, never run; the portfolio's script catalog reads the same facts.
+
+class ScriptsDescribeThemselves(unittest.TestCase):
+    def test_every_script_has_a_description_and_declared_arguments(self):
+        fleet.check_scripts(fleet.repo_root(__file__))
