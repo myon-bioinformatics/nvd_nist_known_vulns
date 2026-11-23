@@ -13,4 +13,4 @@ permissions:
 
 jobs:
   actionlint:
-    uses: myon-bioinformatics/myon-bioinformatics/.github/workflows/reusable-actionlint.yml@98a0e611cc879fde2d047da806de5a2121a65524
+    uses: myon-bioinformatics/myon-bioinformatics/.github/workflows/reusable-actionlint.yml@fbf433b296ec047f1c9acdf4d5d12c81ff7f59e8
