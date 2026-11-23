@@ -14,7 +14,7 @@ import unittest
 from vendor import fleet_check as fleet
 
 ROOT = fleet.repo_root(__file__)
-PARENT_WORKFLOW_PIN = "a816ff489a7d4fdf59ee6890c84b0aca4bc9015c"
+PARENT_WORKFLOW_PIN = "98a0e611cc879fde2d047da806de5a2121a65524"
 XPROBE, GHI = "myon-bioinformatics/xprobe", "myon-bioinformatics/gh_identity"
 # Every locked row's origin; a row from these repositories that is not listed here fails.
 SOURCES = {
