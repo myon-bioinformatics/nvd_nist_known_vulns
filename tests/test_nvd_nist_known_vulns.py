@@ -8,7 +8,7 @@ pytest also collects the plain function at the end.
 - query scope: filtered query receipts must never certify an unfiltered CPE measurement
 - CPE count index: CVE IDs are grouped once per requested CPE
 """
-import contextlib, difflib, io, json, subprocess, sys, tempfile, unittest
+import contextlib, difflib, io, json, sys, tempfile, unittest
 from email.message import Message
 from pathlib import Path
 from unittest import mock
@@ -16,6 +16,7 @@ from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlsplit
 
 import nvd_nist_known_vulns as nvd
+from vendor.cli_args import run_cli
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -368,16 +369,15 @@ class NvdClientTests(unittest.TestCase):
         self.assertIn("error:", stderr.getvalue())
 
 
+
 def _run_cli(args, cwd):
     """Execute the CLI as a process. Callers must not pass arguments that query NVD."""
-    return subprocess.run(
-        [sys.executable, "-S", str(ROOT / "nvd_nist_known_vulns.py"), *args],
+    return run_cli(
+        ROOT / "nvd_nist_known_vulns.py",
+        *args,
+        python_options=("-S",),
         cwd=cwd,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
         timeout=20,
-        check=False,
     )
 
 
