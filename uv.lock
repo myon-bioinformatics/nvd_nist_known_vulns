@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.11"
 
 [[package]]
@@ -30,13 +30,6 @@ dev = [
     { name = "pytest" },
     { name = "pyyaml" },
 ]
-stdlib-test = [
-    { name = "pytest" },
-    { name = "pyyaml" },
-]
-
-[package.group-requires-python]
-dev = ">=3.11"
 
 [package.metadata]
 
@@ -44,10 +37,6 @@ dev = ">=3.11"
 dev = [
     { name = "pytest", marker = "python_full_version >= '3.11'", specifier = ">=8" },
     { name = "pyyaml", marker = "python_full_version >= '3.11'", specifier = ">=6" },
-]
-stdlib-test = [
-    { name = "pytest", specifier = ">=8" },
-    { name = "pyyaml", specifier = ">=6" },
 ]
 
 [[package]]
