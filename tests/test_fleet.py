@@ -25,6 +25,8 @@ SOURCES = {
     "vendor/myon-bioinformatics-LICENSE": (fleet.PARENT, "LICENSE"),
     "vendor/py_launch.cjs": (fleet.PARENT, "py_launch.cjs"),
     "vendor/fleet_check.py": (fleet.PARENT, "fleet_check.py"),
+    "vendor/cli_args.py": ("myon-bioinformatics/cli_args", "cli_args.py"),
+    "vendor/cli_args-LICENSE": ("myon-bioinformatics/cli_args", "LICENSE"),
 }
 # Node sources and the shared checks stay on accepted upstream commits with exact bytes;
 # the xprobe adapter and its licence stay on one commit.
@@ -33,6 +35,8 @@ ACCEPTED = {
     "vendor/fleet_check.py": "64db25eb0fd9025dbe3cbcbced8b88a39ecb9266",
     "vendor/xprobe_pytest.py": "326acd667e13b21bf53ccc1590af960edf8cbf6c",
     "vendor/xprobe-LICENSE": "326acd667e13b21bf53ccc1590af960edf8cbf6c",
+    "vendor/cli_args.py": "5ae22b1a1b808eca93e3c385a8db867fbeb8ee32",
+    "vendor/cli_args-LICENSE": "5ae22b1a1b808eca93e3c385a8db867fbeb8ee32",
 }
 TOOL, ENV_VAR = "nvd_nist_known_vulns.py", "NVD_NIST_KNOWN_VULNS_PYTHON"
 CASES = {
