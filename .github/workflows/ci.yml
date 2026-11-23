@@ -9,7 +9,7 @@ jobs:
   changes:
     permissions:
       contents: read
-    uses: myon-bioinformatics/myon-bioinformatics/.github/workflows/reusable-change-detection.yml@98a0e611cc879fde2d047da806de5a2121a65524
+    uses: myon-bioinformatics/myon-bioinformatics/.github/workflows/reusable-change-detection.yml@fbf433b296ec047f1c9acdf4d5d12c81ff7f59e8
 
   resolve-vendor:
     if: needs.changes.outputs.product_changed == 'true'
@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: myon-bioinformatics/myon-bioinformatics
-          ref: 98a0e611cc879fde2d047da806de5a2121a65524
+          ref: fbf433b296ec047f1c9acdf4d5d12c81ff7f59e8
           path: .vendor-sync-tools
           persist-credentials: false
       - name: Verify vendored bytes and fixed-commit placement
@@ -95,7 +95,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: myon-bioinformatics/myon-bioinformatics
-          ref: 98a0e611cc879fde2d047da806de5a2121a65524
+          ref: fbf433b296ec047f1c9acdf4d5d12c81ff7f59e8
           path: .vendor-sync-tools
           persist-credentials: false
       - name: Download resolved vendor snapshot
@@ -153,7 +153,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-    uses: myon-bioinformatics/myon-bioinformatics/.github/workflows/reusable-junit-identity.yml@98a0e611cc879fde2d047da806de5a2121a65524
+    uses: myon-bioinformatics/myon-bioinformatics/.github/workflows/reusable-junit-identity.yml@fbf433b296ec047f1c9acdf4d5d12c81ff7f59e8
     with:
       commit-sha: ${{ github.event.pull_request.head.sha || github.sha }}
       expected-reports: '["junit-py3.11/pytest-3.11.xml","junit-py3.12/pytest-3.12.xml","junit-py3.13/pytest-3.13.xml","junit-py3.14/pytest-3.14.xml"]'
