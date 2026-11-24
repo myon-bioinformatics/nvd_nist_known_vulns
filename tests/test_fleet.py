@@ -31,7 +31,7 @@ SOURCES = {
 # Node sources and the shared checks stay on accepted upstream commits with exact bytes;
 # the xprobe adapter and its licence stay on one commit.
 ACCEPTED = {
-    "vendor/py_launch.cjs": "384f5dd532076062f7833038764e9a62322c387c",
+    "vendor/py_launch.cjs": "de63762d8485e4d398a651715d34ebf4a04c23f2",
     "vendor/fleet_check.py": "bc57f08a590ee1cb33a8bb37c1bb3b8f28a2f3c9",
     "vendor/xprobe_pytest.py": "326acd667e13b21bf53ccc1590af960edf8cbf6c",
     "vendor/xprobe-LICENSE": "326acd667e13b21bf53ccc1590af960edf8cbf6c",
