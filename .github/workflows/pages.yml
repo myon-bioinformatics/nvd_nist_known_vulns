@@ -23,8 +23,8 @@ permissions:
 
 jobs:
   pages:
-    uses: myon-bioinformatics/myon-bioinformatics/.github/workflows/reusable-pages-static.yml@1368174821fb03be258ecf3312ce0ea809f6ea22
+    uses: myon-bioinformatics/myon-bioinformatics/.github/workflows/reusable-pages-static.yml@0778ede0c872d609bb2dc590f9f9898a39a18668
     with:
       artifact_path: _site
       guide_page: docs/guide.page.json
-      guide_assets: docs/brand/icon.png=icon.png docs/brand/favicon.png=favicon.png
+      guide_brand: nvd_nist_known_vulns   # ♻️ icon and favicon from CaChereCyCle (nvd_nist_known_vulns.icon / nvd_nist_known_vulns.favicon)

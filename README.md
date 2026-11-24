@@ -3,10 +3,10 @@
 📘 [利用ガイド / Usage guide](https://myon-bioinformatics.github.io/nvd_nist_known_vulns/) (GitHub Pages)
 
 <p align="center">
-  <img src="docs/brand/icon.png" alt="nvd_nist_known_vulns icon" width="160" />
+  <img src="https://myon-bioinformatics.github.io/nvd_nist_known_vulns/icon.png" alt="nvd_nist_known_vulns icon" width="160" />
 </p>
 
-[Icon](docs/brand/icon.png) · [Favicon](docs/brand/favicon.png)
+[Icon](https://myon-bioinformatics.github.io/nvd_nist_known_vulns/icon.png) · [Favicon](https://myon-bioinformatics.github.io/nvd_nist_known_vulns/favicon.png)
 
 **Python compatibility:** supports Python 3.11+, declared in `pyproject.toml`; CI tests Python 3.11–3.14.
 Single-file, Python-standard-library client for the NVD CVE API 2.0. It fetches vulnerabilities for CPE 2.3 names and emits deterministic JSON Lines suitable for CLI use, CI, offline processing, and cross-repository adapters.
