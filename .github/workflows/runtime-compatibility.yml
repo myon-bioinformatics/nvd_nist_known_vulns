@@ -81,7 +81,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-    uses: myon-bioinformatics/myon-bioinformatics/.github/workflows/reusable-junit-identity.yml@dbe7e16be53f9e5b8c9ba29ff6ed8be0899a35ff
+    uses: myon-bioinformatics/myon-bioinformatics/.github/workflows/reusable-junit-identity.yml@1368174821fb03be258ecf3312ce0ea809f6ea22
     with:
       commit-sha: ${{ github.event.pull_request.head.sha || github.sha }}
       expected-reports: '["junit-portability-windows-latest/portability-windows-latest.xml","junit-portability-macos-latest/portability-macos-latest.xml"]'
