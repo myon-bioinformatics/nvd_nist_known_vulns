@@ -1,7 +1,7 @@
 {
   "schema": "web-ui-page/1",
   "title": "nvd_nist_known_vulns 利用ガイド",
-  "theme": "auto",
+  "theme": "modern",
   "description": "CPE 2.3 名から NVD CVE API 2.0 の既知の脆弱性を取得し、JSON Lines で出す単一ファイル。",
   "icon": "./icon.png",
   "favicon": "./favicon.png",
