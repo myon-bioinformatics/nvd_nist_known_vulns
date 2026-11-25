@@ -93,6 +93,65 @@
           ]
         },
         {
+          "label": "🔬 検証ガイド",
+          "blocks": [
+            {
+              "type": "runbook",
+              "id": "verify",
+              "books": [
+                {
+                  "label": "🐍 python",
+                  "intro": "🤖 のついた手順は CI で実際に動かし、出た結果をそのまま載せています。",
+                  "runbook": {
+                    "key": "nvd-nist-known-vulns/python",
+                    "steps": [
+                      {
+                        "id": "get",
+                        "title": "📥 ファイルを置く",
+                        "command": "curl -fsSLO https://raw.githubusercontent.com/myon-bioinformatics/nvd_nist_known_vulns/main/nvd_nist_known_vulns.py",
+                        "needs": "🌐 ネットワーク"
+                      },
+                      {
+                        "id": "cvss",
+                        "title": "🐍 CVSS を計算",
+                        "command": "python -c 'import nvd_nist_known_vulns as n; print(n.calculate_cvss_base(\"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H\"))'",
+                        "run": true
+                      },
+                      {
+                        "id": "cpe",
+                        "title": "🔎 CPE を指定して取得",
+                        "command": "python nvd_nist_known_vulns.py --cpe \"cpe:2.3:a:openssl:openssl:1.1.1c:*:*:*:*:*:*:*\"",
+                        "needs": "🌐 ネットワーク"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "label": "⚡ uv",
+                  "intro": "uv があれば Python の版を気にせず動きます。",
+                  "runbook": {
+                    "key": "nvd-nist-known-vulns/uv",
+                    "steps": [
+                      {
+                        "id": "get",
+                        "title": "📥 ファイルを置く",
+                        "command": "curl -fsSLO https://raw.githubusercontent.com/myon-bioinformatics/nvd_nist_known_vulns/main/nvd_nist_known_vulns.py",
+                        "needs": "🌐 ネットワーク"
+                      },
+                      {
+                        "id": "cvss",
+                        "title": "🐍 CVSS を計算",
+                        "command": "uv run --no-project python -c 'import nvd_nist_known_vulns as n; print(n.calculate_cvss_base(\"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H\"))'",
+                        "run": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
           "label": "🎞 GIF デモ",
           "blocks": [
             {
