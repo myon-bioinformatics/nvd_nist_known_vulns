@@ -177,6 +177,11 @@ def test_supported_runtime_versions_keep_existing_os_coverage():
             {'os': 'macos-15-intel', 'python': '3.11'},
             {'os': 'macos-latest', 'python': '3.14'},
         ],
+        'exclude': "${{ github.event_name == 'pull_request' && fromJSON('[%s]') || fromJSON('[]') }}"
+        % (
+            '{"python":"3.11"},{"python":"3.12"},{"python":"3.13"},'
+            '{"os":"windows-latest","python":"3.14"},{"os":"macos-latest","python":"3.14"}'
+        ),
     }
     assert workflow['permissions'] == {'contents': 'read'}
     assert runtime['steps'][-1]['run'] == 'python -S -m unittest discover -s tests -p test_nvd_nist_known_vulns.py -v'
