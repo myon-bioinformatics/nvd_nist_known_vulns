@@ -179,8 +179,13 @@ def test_supported_runtime_versions_keep_existing_os_coverage():
         ],
         'exclude': "${{ github.event_name == 'pull_request' && fromJSON('[%s]') || fromJSON('[]') }}"
         % (
-            '{"python":"3.11"},{"python":"3.12"},{"python":"3.13"},'
-            '{"os":"windows-latest","python":"3.14"},{"os":"macos-latest","python":"3.14"}'
+            '{"os":"ubuntu-latest","python":"3.11"},'
+            '{"os":"ubuntu-latest","python":"3.12"},'
+            '{"os":"ubuntu-latest","python":"3.13"},'
+            '{"os":"windows-latest","python":"3.11"},'
+            '{"os":"windows-latest","python":"3.14"},'
+            '{"os":"macos-15-intel","python":"3.11"},'
+            '{"os":"macos-latest","python":"3.14"}'
         ),
     }
     assert workflow['permissions'] == {'contents': 'read'}
