@@ -32,8 +32,8 @@ Test names remain visible, and node hashes are not encryption. Reports are
 Using an xprobe checkout at the same commit (replace paths with your locations):
 
 ```sh
-python /path/to/xprobe/scripts/xprobe_cli.py '"outcome": "xfail"' /path/to/downloaded-reports --include '*.jsonl'
-python /path/to/xprobe/scripts/xprobe_cli.py '"phase": "teardown"' /path/to/downloaded-reports --include '*.jsonl'
+python /path/to/xprobe/xprobe.py --search '"outcome": "xfail"' --root /path/to/downloaded-reports --include '*.jsonl'
+python /path/to/xprobe/xprobe.py --search '"phase": "teardown"' --root /path/to/downloaded-reports --include '*.jsonl'
 ```
 
 For structured use, load the JSONL with `xprobe.corpus_from_json(text, jsonl=True)`.
