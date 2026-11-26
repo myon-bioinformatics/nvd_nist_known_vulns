@@ -171,12 +171,8 @@ def test_supported_runtime_versions_keep_existing_os_coverage():
     assert runtime['strategy']['matrix'] == {
         'os': ['ubuntu-latest'],
         'python': ['3.11', '3.12', '3.13', '3.14'],
-        'include': [
-            {'os': 'windows-latest', 'python': '3.11'},
-            {'os': 'windows-latest', 'python': '3.14'},
-            {'os': 'macos-15-intel', 'python': '3.11'},
-            {'os': 'macos-latest', 'python': '3.14'},
-        ],
+        'include': '${{ github.event_name == \'pull_request\' && fromJSON(\'[]\') || fromJSON(\'[{"os":"windows-latest","python":"3.11"},{"os":"windows-latest","python":"3.14"},{"os":"macos-15-intel","python":"3.11"},{"os":"macos-latest","python":"3.14"}]\') }}',
+        'exclude': '${{ github.event_name == \'pull_request\' && fromJSON(\'[{"os":"ubuntu-latest","python":"3.11"},{"os":"ubuntu-latest","python":"3.12"},{"os":"ubuntu-latest","python":"3.13"}]\') || fromJSON(\'[]\') }}',
     }
     assert workflow['permissions'] == {'contents': 'read'}
     assert runtime['steps'][-1]['run'] == 'python -S -m unittest discover -s tests -p test_nvd_nist_known_vulns.py -v'
