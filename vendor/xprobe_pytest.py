@@ -1,9 +1,6 @@
 """Opt-in pytest adapter. Runtime xprobe.py remains stdlib-only."""
-import hashlib
-import json
+import hashlib, json, re, uuid
 from pathlib import Path
-import re
-import uuid
 
 import pytest
 
