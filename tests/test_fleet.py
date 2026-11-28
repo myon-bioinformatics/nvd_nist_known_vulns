@@ -45,7 +45,7 @@ SOURCES = {
 # the xprobe adapter and its licence stay on one commit.
 ACCEPTED = {
     "vendor/py_launch.cjs": "de63762d8485e4d398a651715d34ebf4a04c23f2",
-    "vendor/fleet_check.py": "20de01921e50e9339aa9271b0547a5be7649b3b3",
+    "vendor/fleet_check.py": "eee8c096fc753465a5d5a26264e64c12e555638f",
     "vendor/xprobe_pytest.py": "326acd667e13b21bf53ccc1590af960edf8cbf6c",
     "vendor/xprobe-LICENSE": "326acd667e13b21bf53ccc1590af960edf8cbf6c",
     "vendor/cli_args.py": "5ae22b1a1b808eca93e3c385a8db867fbeb8ee32",
@@ -217,8 +217,22 @@ def test_cleanup(resource):
     destination = tmp_path / 'events.jsonl'
     env = dict(os.environ, PYTHONPATH=str(ROOT), PYTEST_DISABLE_PLUGIN_AUTOLOAD='1')
     env.pop('PYTEST_ADDOPTS', None)
+    (tmp_path / "conftest.py").write_text(
+        "import importlib.util\nimport sys\nfrom pathlib import Path\n\n\n"
+        "def load_vendored(name, relpath):\n"
+        '    """Load a vendored file by path under a repo-unique name (cli_args README: Loading a vendored copy)."""\n'
+        "    if name not in sys.modules:\n"
+        "        spec = importlib.util.spec_from_file_location(name, Path(%r) / relpath)\n"
+        "        module = importlib.util.module_from_spec(spec)\n"
+        "        sys.modules[name] = module\n"
+        "        spec.loader.exec_module(module)\n"
+        "    return sys.modules[name]\n\n"
+        'load_vendored("nvd_nist_known_vulns_xprobe_pytest", "vendor/xprobe_pytest.py")\n'
+        'pytest_plugins = ["nvd_nist_known_vulns_xprobe_pytest"]\n'
+        % str(ROOT),
+        encoding="utf-8")
     result = subprocess.run(
-        [sys.executable, '-m', 'pytest', '-c', os.devnull, '-p', 'vendor.xprobe_pytest',
+        [sys.executable, '-m', 'pytest', '-c', os.devnull, '--rootdir=' + str(tmp_path),
          '--xprobe-jsonl=' + str(destination), '--xprobe-repository=myon-bioinformatics/nvd_nist_known_vulns',
          str(suite)], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
     assert result.returncode == 1, result.stdout + result.stderr
@@ -254,3 +268,6 @@ class ScriptsDescribeThemselves(unittest.TestCase):
         for path in sorted(root.glob("*.py")):
             if path.name != "conftest.py":
                 fleet.check_imports(root, path.name)
+
+    def test_no_top_level_vendor_package_imports(self):
+        assert fleet.check_no_vendor_package_imports(ROOT) == []
