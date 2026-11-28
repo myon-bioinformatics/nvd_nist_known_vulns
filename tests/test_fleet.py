@@ -3,6 +3,8 @@
 Shared checks come from the parent's vendor/fleet_check.py; stdlib unittest, also under pytest.
 Plain test functions are collected by pytest only (the locked lane, with PyYAML); unittest runs the classes.
 """
+import importlib.util
+from pathlib import Path
 import json
 import os
 import re
@@ -11,7 +13,18 @@ import sys
 import tomllib
 import unittest
 
-from vendor import fleet_check as fleet
+
+def load_vendored(name, relpath):
+    """Load a vendored file by path under a repo-unique name (cli_args README: Loading a vendored copy)."""
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(name, Path(__file__).resolve().parents[1] / relpath)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    return sys.modules[name]
+
+
+fleet = load_vendored("nvd_nist_known_vulns_fleet_check", "vendor/fleet_check.py")
 
 ROOT = fleet.repo_root(__file__)
 PARENT_WORKFLOW_PIN = "27dedd9651efc816fa88d8922adb5f242725df69"
