@@ -8,6 +8,7 @@ pytest also collects the plain function at the end.
 - query scope: filtered query receipts must never certify an unfiltered CPE measurement
 - CPE count index: CVE IDs are grouped once per requested CPE
 """
+import importlib.util
 import contextlib, difflib, io, json, sys, tempfile, unittest
 from email.message import Message
 from pathlib import Path
@@ -16,7 +17,19 @@ from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlsplit
 
 import nvd_nist_known_vulns as nvd
-from vendor.cli_args import run_cli
+
+
+def load_vendored(name, relpath):
+    """Load a vendored file by path under a repo-unique name (cli_args README: Loading a vendored copy)."""
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(name, Path(__file__).resolve().parents[1] / relpath)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    return sys.modules[name]
+
+
+run_cli = load_vendored("nvd_nist_known_vulns_cli_args", "vendor/cli_args.py").run_cli
 
 ROOT = Path(__file__).resolve().parents[1]
 
